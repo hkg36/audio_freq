@@ -13,6 +13,7 @@
 #include "WavSink.h"
 
 #include <aviriff.h>
+#include "Fourier.h"
 
 #pragma warning( push )
 #pragma warning( disable : 4355 )  // 'this' used in base member initializer list
@@ -1705,6 +1706,7 @@ HRESULT CWavStream::OnDispatchWorkItem(IMFAsyncResult* pAsyncResult)
         switch (op)
         {
         case OpStart:
+			OnStartWork();
         case OpRestart:
             // Send MEStreamSinkStarted.
             hr = QueueEvent(MEStreamSinkStarted, GUID_NULL, hr, NULL);
@@ -1775,7 +1777,7 @@ HRESULT CWavStream::DispatchProcessSample(CAsyncOperation* pOp)
             hr = QueueEvent(MEStreamSinkRequestSample, GUID_NULL, S_OK, NULL);
         }
     }
-
+	
     // We are in the middle of an asynchronous operation, so if something failed, send an error.
     if (FAILED(hr))
     {
@@ -1880,7 +1882,7 @@ HRESULT CWavStream::WriteSampleToFile(IMFSample *pSample)
     DWORD cbData = 0;
     DWORD cbWritten = 0;
 
-    IMFMediaBuffer *pBuffer = NULL;
+    CComPtr<IMFMediaBuffer> pBuffer;
 
     // Get the time stamp
     hr = pSample->GetSampleTime(&time);
@@ -1895,27 +1897,52 @@ HRESULT CWavStream::WriteSampleToFile(IMFSample *pSample)
     }
     // Note: If there is no time stamp on the sample, proceed anyway.
 
-    hr = pSample->ConvertToContiguousBuffer(&pBuffer);
+	DWORD count;
+	hr=pSample->GetBufferCount(&count);
+	if(SUCCEEDED(hr))
+	{
+		for(DWORD i=0;i<count;i++)
+		{
+			hr = pSample->GetBufferByIndex(i,&pBuffer);
 
-    // Lock the buffer and write the data to the file.
-    if (SUCCEEDED(hr))
-    {
-        hr = pBuffer->Lock(&pData, NULL, &cbData);
-    }
+			// Lock the buffer and write the data to the file.
+			if (SUCCEEDED(hr))
+			{
+				hr = pBuffer->Lock(&pData, NULL, &cbData);
+			}
 
-    if (SUCCEEDED(hr))
-    {
-        hr = m_pByteStream->Write(pData, cbData, &cbWritten);
-        pBuffer->Unlock();
-    }
+			int count=cbData/2;
+			for(int s=0;s<count;s+=waveFormat.nChannels)
+			{
+				m_FreqSave.push_back(((short*)pData)[s]);
+			}
+			if (SUCCEEDED(hr))
+			{
+				hr = m_pByteStream->Write(pData, cbData, &cbWritten);
+				pBuffer->Unlock();
+			}
 
-    // Update the running tally of bytes written.
-    if (SUCCEEDED(hr))
-    {
-        m_cbDataWritten += cbData;
-    }
-
-    SafeRelease(&pBuffer);
+			// Update the running tally of bytes written.
+			if (SUCCEEDED(hr))
+			{
+				m_cbDataWritten += cbData;
+			}
+		}
+		
+		while(m_FreqSave.size()>=SampleCount)
+		{
+			std::vector<double> tempfreq(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
+			std::vector<double> outR(SampleCount),outI(SampleCount);
+			fft_double(8192,false,&tempfreq[0],nullptr,&outR[0],&outI[0]);
+			std::vector<double> freqRes(SampleCount/2);
+			for(int i=0;i<SampleCount/2;i++)
+			{
+				freqRes[i]=sqrt(outR[i]*outR[i]+outI[i]*outI[i]);
+			}
+			m_FreqSave.erase(m_FreqSave.begin(),m_FreqSave.begin()+8192);
+			m_FreqSamples.push_back(std::move(freqRes));
+		}
+	}
     return hr;
 }
 
@@ -1951,7 +1978,22 @@ HRESULT CWavStream::SendMarkerEvent(IMarker *pMarker, FlushState FlushState)
     PropVariantClear(&var);
     return hr;
 }
+HRESULT	CWavStream::OnStartWork()
+{
+	HRESULT hr = S_OK;
 
+    WAVEFORMATEX *pWav = NULL;
+    UINT cbSize = 0;
+
+	if (SUCCEEDED(hr))
+    {
+        hr = MFCreateWaveFormatExFromMFMediaType(m_pCurrentType, &pWav, &cbSize);
+    }
+	memcpy(&waveFormat,pWav,min(cbSize,sizeof(waveFormat)));
+	CoTaskMemFree(pWav);
+	assert(waveFormat.nSamplesPerSec==44100 && waveFormat.wBitsPerSample==16);
+	return hr;
+}
 
 //-------------------------------------------------------------------
 // Name: DispatchFinalize
@@ -2019,6 +2061,72 @@ HRESULT CWavStream::DispatchFinalize(CAsyncOperation* pOp)
 
     CoTaskMemFree(pWav);
 
+	ATL::CImage memimage;
+	BOOL res=memimage.CreateEx(SampleCount/2,m_FreqSamples.size(),24,BI_RGB);
+	
+	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
+	{
+		double core[]={-1,-4,11,-4,-1};
+		std::vector<double> temp(SampleCount/2);
+		for(int j=2;j<SampleCount/2-2;j++)
+		{
+			double v=i->at(j-2)*core[0]+i->at(j-1)*core[1]+i->at(j)*core[2]+i->at(j+1)*core[3]+i->at(j+2)*core[4];
+			if(v>0)
+				temp[j]=10000*(M_PI_2-atan(v));
+		}
+		*i=std::move(temp);
+	}
+	size_t startFrq=1540,endFrq=2500;
+	double max=0;
+	std::vector<int> maxFreqList;
+	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
+	{
+		int maxFreq=0;
+		double maxFreqStrong=0;
+		for(size_t j=startFrq;j<endFrq;j++)
+		{
+			double strong=i->at(j);
+			if(strong>maxFreqStrong)
+			{
+				maxFreqStrong=strong;
+				maxFreq=j;
+			}
+			max=max(max,strong);
+		}
+		if(maxFreq>0)
+			maxFreqList.push_back(maxFreq);
+	}
+
+	FILE* recordfile=nullptr;
+	_wfopen_s(&recordfile,L"D:\\record.txt",L"w");
+	for(size_t i=0;i<maxFreqList.size();i++)
+	{
+		fwprintf(recordfile,L"%d\r\n",maxFreqList[i]);
+	}
+	fclose(recordfile);
+	
+	int line=0;
+	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
+	{
+		for(size_t j=0;j<SampleCount/2;j++)
+		{
+			const double back[]={255,255,255};
+			if(j==endFrq || j==startFrq)
+			{
+				memimage.SetPixel(j,line,RGB(255-back[0],255-back[1],255-back[2]));
+			}
+			else
+			{
+				double strong=i->at(j);
+				double alpha=min(1,(double)strong/max);
+				COLORREF drawColor=RGB(alpha*255+(1-alpha)*back[0],(1-alpha)*back[1],(1-alpha)*back[2]);
+				//COLORREF drawColor=RGB(alpha*255,0,0);
+				memimage.SetPixel(j,line,drawColor);
+			}
+		}
+		line++;
+	}
+	memimage.Save(_T("d:\\waveoutput.png"),Gdiplus::ImageFormatPNG);
     return hr;
 }
 

@@ -9,7 +9,7 @@
 //
 //  Copyright (C) Microsoft Corporation. All rights reserved.
 //-----------------------------------------------------------------------------
-
+#define _USE_MATH_DEFINES
 #include <windows.h>
 #include <mfidl.h>
 #include <mfapi.h>
@@ -18,6 +18,13 @@
 #include <assert.h>
 #include <atlbase.h>
 #include <list>
+#include <vector>
+#include <utility>
+#include <atlimage.h>
+#include <atlapp.h>
+#include <atlmisc.h>
+#include <atlfile.h>
+#include <Gdiplusimaging.h>
 
 #include "CreateWavSink.h"
 
@@ -340,11 +347,13 @@ private:
     HRESULT     OnDispatchWorkItem(IMFAsyncResult* pAsyncResult);
     HRESULT     DispatchProcessSample(CAsyncOperation* pOp);
     HRESULT     DispatchFinalize(CAsyncOperation* pOp);
+	HRESULT		OnStartWork();
 
     HRESULT     ProcessSamplesFromQueue(FlushState bFlushData);
     HRESULT     WriteSampleToFile(IMFSample *pSample);
     HRESULT     SendMarkerEvent(IMarker *pMarker, FlushState bFlushData);
-
+	static const size_t SampleCount=8192;
+	WAVEFORMATEX waveFormat;
 
     long                        m_nRefCount;                // reference count
     CRITICAL_SECTION            m_critSec;                  // critical section for thread safety
@@ -366,7 +375,8 @@ private:
 
 	std::list<CComPtr<IUnknown>>        m_SampleQueue;              // Queue to hold samples and markers.
                                                             // Applies to: ProcessSample, PlaceMarker, BeginFinalize
-
+	std::list<std::vector<double>>		m_FreqSamples;
+	std::vector<double> m_FreqSave;
     IMFAsyncResult              *m_pFinalizeResult;         // Result object for Finalize operation.
 
 };

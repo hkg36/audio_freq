@@ -149,9 +149,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CreateWavSink.h" />
+    <ClInclude Include="Fourier.h" />
     <ClInclude Include="WavSink.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Fourier.cpp" />
     <ClCompile Include="WavSink.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
