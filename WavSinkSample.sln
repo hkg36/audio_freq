@@ -10,6 +10,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WavSink", "WavSink\WavSink.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WriteWavFile", "WriteWavFile\WriteWavFile.vcxproj", "{3A049B3F-E9C2-4B3A-941C-AE49C02ECA18}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FreqWatch", "FreqWatch\FreqWatch.vcxproj", "{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -34,6 +36,12 @@ Global
 		{3A049B3F-E9C2-4B3A-941C-AE49C02ECA18}.Release|Win32.Build.0 = Release|Win32
 		{3A049B3F-E9C2-4B3A-941C-AE49C02ECA18}.Release|x64.ActiveCfg = Release|x64
 		{3A049B3F-E9C2-4B3A-941C-AE49C02ECA18}.Release|x64.Build.0 = Release|x64
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Debug|Win32.Build.0 = Debug|Win32
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Debug|x64.ActiveCfg = Debug|Win32
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Release|Win32.ActiveCfg = Release|Win32
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Release|Win32.Build.0 = Release|Win32
+		{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -352,7 +352,7 @@ private:
     HRESULT     ProcessSamplesFromQueue(FlushState bFlushData);
     HRESULT     WriteSampleToFile(IMFSample *pSample);
     HRESULT     SendMarkerEvent(IMarker *pMarker, FlushState bFlushData);
-	static const size_t SampleCount=8192;
+	static const size_t SampleCount=4096;
 	WAVEFORMATEX waveFormat;
 
     long                        m_nRefCount;                // reference count
@@ -375,8 +375,9 @@ private:
 
 	std::list<CComPtr<IUnknown>>        m_SampleQueue;              // Queue to hold samples and markers.
                                                             // Applies to: ProcessSample, PlaceMarker, BeginFinalize
-	std::list<std::vector<double>>		m_FreqSamples;
+	std::vector<std::vector<double>>		m_FreqSamples;
 	std::vector<double> m_FreqSave;
+	
     IMFAsyncResult              *m_pFinalizeResult;         // Result object for Finalize operation.
 
 };

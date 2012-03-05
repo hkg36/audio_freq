@@ -1933,13 +1933,13 @@ HRESULT CWavStream::WriteSampleToFile(IMFSample *pSample)
 		{
 			std::vector<double> tempfreq(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
 			std::vector<double> outR(SampleCount),outI(SampleCount);
-			fft_double(8192,false,&tempfreq[0],nullptr,&outR[0],&outI[0]);
+			fft_double(SampleCount,false,&tempfreq[0],nullptr,&outR[0],&outI[0]);
 			std::vector<double> freqRes(SampleCount/2);
 			for(int i=0;i<SampleCount/2;i++)
 			{
 				freqRes[i]=sqrt(outR[i]*outR[i]+outI[i]*outI[i]);
 			}
-			m_FreqSave.erase(m_FreqSave.begin(),m_FreqSave.begin()+8192);
+			m_FreqSave.erase(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
 			m_FreqSamples.push_back(std::move(freqRes));
 		}
 	}
@@ -2061,72 +2061,38 @@ HRESULT CWavStream::DispatchFinalize(CAsyncOperation* pOp)
 
     CoTaskMemFree(pWav);
 
-	ATL::CImage memimage;
-	BOOL res=memimage.CreateEx(SampleCount/2,m_FreqSamples.size(),24,BI_RGB);
-	
-	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
+	/*std::vector<std::vector<double>> srcSimple=std::move(m_FreqSamples);
+	for(int i=1;i!=srcSimple.size()-1;i++)
 	{
-		double core[]={-1,-4,11,-4,-1};
+		double core[3][3]={
+			-1,-1,-1,
+			-1,9,-1,
+			-1,-1,-1
+		};
 		std::vector<double> temp(SampleCount/2);
-		for(int j=2;j<SampleCount/2-2;j++)
+		for(int j=1;j<SampleCount/2-1;j++)
 		{
-			double v=i->at(j-2)*core[0]+i->at(j-1)*core[1]+i->at(j)*core[2]+i->at(j+1)*core[3]+i->at(j+2)*core[4];
+			double v=0;
+			for(int x=0;x<3;x++)
+				for(int y=0;y<3;y++)
+				{
+					v+=srcSimple[i-1+x][j-1+y]*core[x][y];
+				}
 			if(v>0)
-				temp[j]=10000*(M_PI_2-atan(v));
+			{
+				if(v>srcSimple[i][j]*8)
+					temp[j]=v;
+			}
 		}
-		*i=std::move(temp);
-	}
-	size_t startFrq=1540,endFrq=2500;
-	double max=0;
-	std::vector<int> maxFreqList;
+		m_FreqSamples.push_back(std::move(temp));
+	}*/
+	FILE* fp=NULL;
+	fopen_s(&fp,"d:\\wavedata.data","wb");
 	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
 	{
-		int maxFreq=0;
-		double maxFreqStrong=0;
-		for(size_t j=startFrq;j<endFrq;j++)
-		{
-			double strong=i->at(j);
-			if(strong>maxFreqStrong)
-			{
-				maxFreqStrong=strong;
-				maxFreq=j;
-			}
-			max=max(max,strong);
-		}
-		if(maxFreq>0)
-			maxFreqList.push_back(maxFreq);
+		fwrite(&i->at(0),sizeof(double),SampleCount/2,fp);
 	}
-
-	FILE* recordfile=nullptr;
-	_wfopen_s(&recordfile,L"D:\\record.txt",L"w");
-	for(size_t i=0;i<maxFreqList.size();i++)
-	{
-		fwprintf(recordfile,L"%d\r\n",maxFreqList[i]);
-	}
-	fclose(recordfile);
-	
-	int line=0;
-	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
-	{
-		for(size_t j=0;j<SampleCount/2;j++)
-		{
-			const double back[]={255,255,255};
-			if(j==endFrq || j==startFrq)
-			{
-				memimage.SetPixel(j,line,RGB(255-back[0],255-back[1],255-back[2]));
-			}
-			else
-			{
-				double strong=i->at(j);
-				double alpha=min(1,(double)strong/max);
-				COLORREF drawColor=RGB(alpha*255+(1-alpha)*back[0],(1-alpha)*back[1],(1-alpha)*back[2]);
-				//COLORREF drawColor=RGB(alpha*255,0,0);
-				memimage.SetPixel(j,line,drawColor);
-			}
-		}
-		line++;
-	}
-	memimage.Save(_T("d:\\waveoutput.png"),Gdiplus::ImageFormatPNG);
+	fclose(fp);
     return hr;
 }
 
