@@ -42,6 +42,8 @@ public:
 		MESSAGE_HANDLER(WM_CLIENTMOUSEMOVE,OnClientMouseMove)
 		COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
 		COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
+		COMMAND_ID_HANDLER(ID_FILE_SAVE,OnFileSave)
+		COMMAND_ID_HANDLER(ID_FILE_OPEN,OnFileOpen)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
 		CHAIN_MSG_MAP(CUpdateUI<CMainFrame>)
@@ -141,6 +143,175 @@ public:
 		}
 		return 0;
 	}
+	LRESULT OnFileSave(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		CAboutDlg dlg;
+		if(dlg.DoModal()!=IDOK)
+			return S_OK;
+		int song_id=dlg.id;
+		CSqlite db;
+		db.Open(L"D:\\freq_info.data.db");
+		CSqliteStmt insertAnchor = db.Prepare(L"insert into Anchor_freq_index(freq,time,song_id) values(?1,?2,?3)");
+		CSqliteStmt lastAnchorID = db.Prepare(L"select last_insert_rowid() from Anchor_freq_index");
+		CSqliteStmt insertCheck=db.Prepare(L"insert into Check_freq_index(Anchor_id,freq,time_offset) values(?1,?2,?3)");
+
+		db.Execute(L"begin transaction");
+		std::vector<FreqInfo> freqinfos_use;
+		for(auto i=freqinfos.begin();i<freqinfos.end();i++)
+		{
+			if(i->freq>50 && i->freq<400)
+			{
+				freqinfos_use.push_back(*i);
+			}
+		}
+		int ptcount=0;
+		for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
+		{
+			std::vector<FreqInfo> anchor_sub;
+			for(auto j=i+1;j<freqinfos_use.end();j++)
+			{
+				if(j->time>i->time+45)
+					break;
+				if(j->freq>i->freq-30 && j->freq<i->freq+30 &&
+					j->time>i->time+5)
+				{
+					anchor_sub.push_back(*j);
+				}
+			}
+			if(anchor_sub.size()>3)
+			{
+				insertAnchor.Bind(1,i->freq);
+				insertAnchor.Bind(2,i->time);
+				insertAnchor.Bind(3,song_id);
+				if(SQLITE_DONE==insertAnchor.Step())
+				{
+					insertAnchor.Reset();
+					int insert_id=0;
+					if(SQLITE_ROW==lastAnchorID.Step())
+					{
+						insert_id=lastAnchorID.GetInt(0);
+						lastAnchorID.Reset();
+					}
+					if(insert_id)
+					{
+						for(auto j=anchor_sub.begin();j!=anchor_sub.end();j++)
+						{
+							insertCheck.Bind(1,insert_id);
+							insertCheck.Bind(2,j->freq);
+							insertCheck.Bind(3,j->time-i->time);
+							insertCheck.Step();
+							insertCheck.Reset();
+						}
+					}
+				}
+			}
+		}
+		db.Execute(L"commit transaction");
+		insertAnchor.Close();
+		lastAnchorID.Close();
+		insertCheck.Close();
+		db.Close();
+		return S_OK;
+	}
+	LRESULT OnFileOpen(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		struct FreqPoint
+		{
+			int id;
+			int freq;
+			int time;
+			int song_id;
+		};
+		struct FreqPointPicked:public FreqPoint
+		{
+			int sample_time;
+			int match_count;
+		};
+
+		CSqlite db;
+		db.Open(L"D:\\freq_info.data.db",SQLITE_OPEN_READONLY);
+		CSqliteStmt findAnchor = db.Prepare(L"select id,freq,time,song_id from Anchor_freq_index where freq=?1");
+		CSqliteStmt findCheckPoint =db.Prepare(L"select count(*) from Check_freq_index where Anchor_id=?1 and freq>=?2 and freq<=?3 and time_offset>=?4 and time_offset<=?5");
+
+		std::vector<FreqInfo> freqinfos_use;
+		for(auto i=freqinfos.begin();i<freqinfos.end();i++)
+		{
+			if(i->freq>50 && i->freq<400)
+			{
+				freqinfos_use.push_back(*i);
+			}
+		}
+		int ptcount=0;
+		vector<FreqPointPicked> checkres;
+		for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
+		{
+			vector<FreqPoint> maybeid;
+			findAnchor.Bind(1,i->freq);
+			while(SQLITE_ROW==findAnchor.Step())
+			{
+				FreqPoint fpoint;
+				fpoint.id=findAnchor.GetInt(0);
+				fpoint.freq=findAnchor.GetInt(1);
+				fpoint.time=findAnchor.GetInt(2);
+				fpoint.song_id=findAnchor.GetInt(3);
+				maybeid.push_back(fpoint);
+			}
+			findAnchor.Reset();
+			
+			if(maybeid.empty())
+				continue;
+
+			for(auto maybe=maybeid.begin();maybe!=maybeid.end();maybe++)
+			{
+				int match_count=0;
+				for(auto j=i+1;j<freqinfos_use.end();j++)
+				{
+					if(j->time>i->time+45)
+						break;
+					if(j->freq>i->freq-30 && j->freq<i->freq+30 &&
+						j->time>i->time+5)
+					{
+						findCheckPoint.Bind(1,maybe->id);
+						findCheckPoint.Bind(2,j->freq-1);
+						findCheckPoint.Bind(3,j->freq+1);
+						findCheckPoint.Bind(4,j->time-i->time-1);
+						findCheckPoint.Bind(5,j->time-i->time+1);
+						if(SQLITE_ROW==findCheckPoint.Step())
+						{
+							int count=findCheckPoint.GetInt(0);
+							if(count)
+							{
+								match_count++;
+							}
+						}
+						findCheckPoint.Reset();
+					}
+				}
+				if(match_count>2)
+				{
+					FreqPointPicked picked;
+					picked.id=maybe->id;
+					picked.freq=maybe->freq;
+					picked.time=maybe->time;
+					picked.song_id=maybe->song_id;
+					picked.match_count=match_count;
+					picked.sample_time=i->time;
+					checkres.push_back(picked);
+				}
+			}
+		}
+
+		findAnchor.Close();
+		findCheckPoint.Close();
+		db.Close();
+
+		for(auto i=checkres.begin();i!=checkres.end();i++)
+		{
+			ATLTRACE(_T("match found,%d,%d,%d,%d\n"),i->song_id,i->freq,i->time,i->sample_time);
+		}
+		return S_OK;
+	}
+	
 	std::vector<std::vector<double>> darklines;
 	std::vector<FreqInfo> freqinfos;
 	void BuildData()
