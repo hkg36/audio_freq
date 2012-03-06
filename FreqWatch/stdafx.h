@@ -13,10 +13,16 @@
 #define _WTL_NO_WTYPES
 #include <atlbase.h>
 #include <atlstr.h>
+#include <atltypes.h>
 #include <atlapp.h>
 #include <vector>
 #include <atlmisc.h>
 #include <atlimage.h>
+#include <atlscrl.h>
+#include <atlctrls.h>
+#include <atlctrlx.h>
+#include <atlctrlw.h>
+#include <atlcrack.h>
 
 extern CAppModule _Module;
 
