@@ -33,9 +33,9 @@
 //          caller must release the interface.
 //-------------------------------------------------------------------
 
-HRESULT CreateWavSink(IMFByteStream *pStream, IMFMediaSink **ppSink)
+HRESULT CreateWavSink(IMFByteStream *pStream,IUnknown* WavRecord, IMFMediaSink **ppSink)
 {
-    return CWavSink::CreateInstance(pStream, IID_IMFMediaSink, (void**)ppSink);
+    return CWavSink::CreateInstance(pStream,WavRecord, IID_IMFMediaSink, (void**)ppSink);
 }
 
 
@@ -118,9 +118,9 @@ HRESULT CreatePCMAudioType(
 // [See CreateWavSink]
 //-------------------------------------------------------------------
 
-/* static */ HRESULT CWavSink::CreateInstance(IMFByteStream *pStream, REFIID iid, void **ppSink)
+/* static */ HRESULT CWavSink::CreateInstance(IMFByteStream *pStream,IUnknown* WavRecord, REFIID iid, void **ppSink)
 {
-    if (pStream == NULL || ppSink == NULL)
+    if (ppSink == NULL)
     {
         return E_INVALIDARG;
     }
@@ -135,7 +135,7 @@ HRESULT CreatePCMAudioType(
 
     if (SUCCEEDED(hr))
     {
-        hr = pSink->Initialize(pStream);
+        hr = pSink->Initialize(pStream,WavRecord);
     }
 
     if (SUCCEEDED(hr))
@@ -668,7 +668,7 @@ HRESULT CWavSink::OnClockSetRate(
 //       initialized.
 //-------------------------------------------------------------------
 
-HRESULT CWavSink::Initialize(IMFByteStream *pByteStream)
+HRESULT CWavSink::Initialize(IMFByteStream *pByteStream,IUnknown* WavRecord)
 {
     HRESULT hr = S_OK;
 
@@ -683,6 +683,7 @@ HRESULT CWavSink::Initialize(IMFByteStream *pByteStream)
     {
         hr = m_pStream->Initialize(this, pByteStream);
     }
+	WavRecord->QueryInterface(&m_pStream->m_pWaveRecorder);
     return hr;
 }
 
@@ -1305,9 +1306,7 @@ HRESULT CWavStream::SetCurrentMediaType(IMFMediaType *pMediaType)
 
     if (SUCCEEDED(hr))
     {
-        SafeRelease(&m_pCurrentType);
         m_pCurrentType = pMediaType;
-        m_pCurrentType->AddRef();
 
         m_state = State_Ready;
     }
@@ -1384,7 +1383,6 @@ HRESULT CWavStream::GetMajorType(GUID *pguidMajorType)
 HRESULT CWavStream::Initialize(CWavSink *pParent, IMFByteStream *pByteStream)
 {
     assert(pParent != NULL);
-    assert(pByteStream != NULL);
 
     HRESULT hr = S_OK;
 
@@ -1392,22 +1390,24 @@ HRESULT CWavStream::Initialize(CWavSink *pParent, IMFByteStream *pByteStream)
     const DWORD dwRequiredCaps = (MFBYTESTREAM_IS_WRITABLE | MFBYTESTREAM_IS_SEEKABLE);
 
     // Make sure the byte stream has the necessary caps bits.
-    hr = pByteStream->GetCapabilities(&dwCaps);
+	if(pByteStream)
+	{
+		hr = pByteStream->GetCapabilities(&dwCaps);
 
-    if (SUCCEEDED(hr))
-    {
-        if ((dwCaps & dwRequiredCaps) != dwRequiredCaps)
-        {
-            hr = E_FAIL;
-        }
-    }
+		if (SUCCEEDED(hr))
+		{
+			if ((dwCaps & dwRequiredCaps) != dwRequiredCaps)
+			{
+				hr = E_FAIL;
+			}
+		}
 
-    // Move the file pointer to leave room for the RIFF headers.
-    if (SUCCEEDED(hr))
-    {
-        hr = pByteStream->SetCurrentPosition(sizeof(WAV_FILE_HEADER));
-    }
-
+		// Move the file pointer to leave room for the RIFF headers.
+		if (SUCCEEDED(hr))
+		{
+			hr = pByteStream->SetCurrentPosition(sizeof(WAV_FILE_HEADER));
+		}
+	}
     // Create the event queue helper.
     if (SUCCEEDED(hr))
     {
@@ -1423,10 +1423,8 @@ HRESULT CWavStream::Initialize(CWavSink *pParent, IMFByteStream *pByteStream)
     if (SUCCEEDED(hr))
     {
         m_pByteStream = pByteStream;
-        m_pByteStream->AddRef();
 
         m_pSink = pParent;
-        m_pSink->AddRef();
     }
 
     return hr;
@@ -1641,12 +1639,6 @@ HRESULT CWavStream::Shutdown()
     MFUnlockWorkQueue(m_WorkQueueId);
 
 	m_SampleQueue.clear();
-
-    SafeRelease(&m_pSink);
-    SafeRelease(&m_pEventQueue);
-    SafeRelease(&m_pByteStream);
-    SafeRelease(&m_pCurrentType);
-    SafeRelease(&m_pFinalizeResult);
 
     m_IsShutdown = TRUE;
 
@@ -1911,14 +1903,13 @@ HRESULT CWavStream::WriteSampleToFile(IMFSample *pSample)
 				hr = pBuffer->Lock(&pData, NULL, &cbData);
 			}
 
-			int count=cbData/2;
-			for(int s=0;s<count;s+=waveFormat.nChannels)
-			{
-				m_FreqSave.push_back(((short*)pData)[s]);
-			}
+			
 			if (SUCCEEDED(hr))
 			{
-				hr = m_pByteStream->Write(pData, cbData, &cbWritten);
+				if(m_pWaveRecorder)
+					hr=m_pWaveRecorder->WaveData(pData,cbData);
+				if(m_pByteStream)
+					hr = m_pByteStream->Write(pData, cbData, &cbWritten);
 				pBuffer->Unlock();
 			}
 
@@ -1928,20 +1919,8 @@ HRESULT CWavStream::WriteSampleToFile(IMFSample *pSample)
 				m_cbDataWritten += cbData;
 			}
 		}
-		
-		while(m_FreqSave.size()>=SampleCount)
-		{
-			std::vector<double> tempfreq(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
-			std::vector<double> outR(SampleCount),outI(SampleCount);
-			fft_double(SampleCount,false,&tempfreq[0],nullptr,&outR[0],&outI[0]);
-			std::vector<double> freqRes(SampleCount/2);
-			for(int i=0;i<SampleCount/2;i++)
-			{
-				freqRes[i]=sqrt(outR[i]*outR[i]+outI[i]*outI[i]);
-			}
-			m_FreqSave.erase(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
-			m_FreqSamples.push_back(std::move(freqRes));
-		}
+		if(m_pWaveRecorder)
+			m_pWaveRecorder->WaveProcess();
 	}
     return hr;
 }
@@ -1982,16 +1961,19 @@ HRESULT	CWavStream::OnStartWork()
 {
 	HRESULT hr = S_OK;
 
-    WAVEFORMATEX *pWav = NULL;
-    UINT cbSize = 0;
+	if(this->m_pWaveRecorder)
+	{
+		WAVEFORMATEX *pWav = NULL;
+		UINT cbSize = 0;
 
-	if (SUCCEEDED(hr))
-    {
-        hr = MFCreateWaveFormatExFromMFMediaType(m_pCurrentType, &pWav, &cbSize);
-    }
-	memcpy(&waveFormat,pWav,min(cbSize,sizeof(waveFormat)));
-	CoTaskMemFree(pWav);
-	assert(waveFormat.nSamplesPerSec==44100 && waveFormat.wBitsPerSample==16);
+		if (SUCCEEDED(hr))
+		{
+			hr = MFCreateWaveFormatExFromMFMediaType(m_pCurrentType, &pWav, &cbSize);
+		}
+		this->m_pWaveRecorder->WaveStart(pWav);
+		CoTaskMemFree(pWav);
+	}
+	
 	return hr;
 }
 
@@ -2039,60 +2021,30 @@ HRESULT CWavStream::DispatchFinalize(CAsyncOperation* pOp)
 
     // Move the file pointer back to the start of the file and write the
     // RIFF headers.
-    if (SUCCEEDED(hr))
-    {
-        hr = m_pByteStream->SetCurrentPosition(0);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = m_pByteStream->Write((BYTE*)&header, sizeof(WAV_FILE_HEADER), &cbWritten);
-    }
+	if(m_pByteStream)
+	{
+		if (SUCCEEDED(hr))
+		{
+			hr = m_pByteStream->SetCurrentPosition(0);
+		}
+		if (SUCCEEDED(hr))
+		{
+			hr = m_pByteStream->Write((BYTE*)&header, sizeof(WAV_FILE_HEADER), &cbWritten);
+		}
 
-    // Close the byte stream.
-    if (SUCCEEDED(hr))
-    {
-        hr = m_pByteStream->Close();
-
-    }
-
+		// Close the byte stream.
+		if (SUCCEEDED(hr))
+		{
+			hr = m_pByteStream->Close();
+		}
+	}
+	if(m_pWaveRecorder)
+		m_pWaveRecorder->WaveEnd();
     // Set the async status and invoke the callback.
     m_pFinalizeResult->SetStatus(hr);
     hr = MFInvokeCallback(m_pFinalizeResult);
 
     CoTaskMemFree(pWav);
-
-	/*std::vector<std::vector<double>> srcSimple=std::move(m_FreqSamples);
-	for(int i=1;i!=srcSimple.size()-1;i++)
-	{
-		double core[3][3]={
-			-1,-1,-1,
-			-1,9,-1,
-			-1,-1,-1
-		};
-		std::vector<double> temp(SampleCount/2);
-		for(int j=1;j<SampleCount/2-1;j++)
-		{
-			double v=0;
-			for(int x=0;x<3;x++)
-				for(int y=0;y<3;y++)
-				{
-					v+=srcSimple[i-1+x][j-1+y]*core[x][y];
-				}
-			if(v>0)
-			{
-				if(v>srcSimple[i][j]*8)
-					temp[j]=v;
-			}
-		}
-		m_FreqSamples.push_back(std::move(temp));
-	}*/
-	FILE* fp=NULL;
-	fopen_s(&fp,"d:\\wavedata.data","wb");
-	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
-	{
-		fwrite(&i->at(0),sizeof(double),SampleCount/2,fp);
-	}
-	fclose(fp);
     return hr;
 }
 
@@ -2376,3 +2328,63 @@ HRESULT ValidateWaveFormat(const WAVEFORMATEX *pWav, DWORD cbSize)
 
 
 
+STDMETHODIMP CWavRecord::WaveStart(WAVEFORMATEX *waveFormat)
+{
+	memcpy(&this->waveFormat,waveFormat,sizeof(WAVEFORMATEX));
+	assert(this->waveFormat.nSamplesPerSec==44100 && this->waveFormat.wBitsPerSample==16);
+	return S_OK;
+}
+STDMETHODIMP CWavRecord::WaveData(void* data,DWORD datalen)
+{
+	int count=datalen/2;
+	for(int s=0;s<count;s+=waveFormat.nChannels)
+	{
+		m_FreqSave.push_back(((short*)data)[s]);
+	}
+	return S_OK;
+}
+STDMETHODIMP CWavRecord::WaveProcess()
+{
+	while(m_FreqSave.size()>=SampleCount)
+	{
+		std::vector<double> tempfreq(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
+		std::vector<double> outR(SampleCount),outI(SampleCount);
+		fft_double(SampleCount,false,&tempfreq[0],nullptr,&outR[0],&outI[0]);
+		std::vector<double> freqRes(SampleCount/2);
+		for(int i=0;i<SampleCount/2;i++)
+		{
+			freqRes[i]=sqrt(outR[i]*outR[i]+outI[i]*outI[i]);
+		}
+		m_FreqSave.erase(m_FreqSave.begin(),m_FreqSave.begin()+SampleCount);
+		m_FreqSamples.push_back(std::move(freqRes));
+	}
+	return S_OK;
+}
+STDMETHODIMP CWavRecord::WaveEnd()
+{
+	FILE* fp=NULL;
+	fopen_s(&fp,"d:\\wavedata.data","wb");
+	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
+	{
+		fwrite(&i->at(0),sizeof(double),SampleCount/2,fp);
+	}
+	fclose(fp);
+	return S_OK;
+}
+STDMETHODIMP CWavRecord::PullOutData(std::vector<std::vector<double>> *reciver)
+{
+	if(reciver==nullptr)
+		return E_FAIL;
+	*reciver=std::move(m_FreqSamples);
+	return S_OK;
+}
+HRESULT CWavRecord::CreateInstanse(const IID &id,void** vp)
+{
+	CWavRecord* newone=new CComObjectNoLock<CWavRecord>();
+	if(newone->QueryInterface(id,vp)!=S_OK)
+	{
+		delete newone;
+		return E_FAIL;
+	}
+	return S_OK;
+}

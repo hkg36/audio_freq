@@ -26,4 +26,4 @@
 //          caller must release the interface.
 //-------------------------------------------------------------------
 
-HRESULT CreateWavSink(IMFByteStream *pStream, IMFMediaSink **ppSink);
+HRESULT CreateWavSink(IMFByteStream *pStream,IUnknown* WavRecord,IMFMediaSink **ppSink);

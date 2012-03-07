@@ -44,6 +44,15 @@ extern CAppModule _Module;
 #pragma comment(lib,"sqlite.lib")
 #endif
 
+#pragma comment(lib,"mfplat.lib")
+#pragma comment(lib,"mfuuid.lib")
+#pragma comment(lib,"mf.lib")
+#ifdef _DEBUG
+#pragma comment(lib,"..\\Debug\\WavSink.lib")
+#else
+#pragma comment(lib,"..\\release\\WavSink.lib")
+#endif
+
 #if defined _M_IX86
   #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #elif defined _M_IA64

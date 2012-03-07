@@ -1,14 +1,11 @@
-#include <windows.h>
+#include "stdafx.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mferror.h>
-#include <stdio.h>
-#include <atlbase.h>
-
 #include "..\\WavSink\\CreateWavSink.h"
 #include "..\\WavSink\\WavSink.h"
 
-std::vector<std::vector<double>> CreateWavFile(const WCHAR *sURL);
+#include "music_reader.h"
 
 HRESULT CreateMediaSource(const WCHAR *sURL, IMFMediaSource **ppSource);
 HRESULT CreateTopology(IMFMediaSource *pSource, IMFMediaSink *pSink, IMFTopology **ppTopology);
@@ -40,50 +37,13 @@ HRESULT RunMediaSession(IMFTopology *pTopology);
 //  Usage: writewavfile.exe inputfile outputfile
 ///////////////////////////////////////////////////////////////////////
 
-int wmain(int argc, wchar_t *argv[ ])
-{
-    HRESULT hr;
-
-    if (argc != 3)
-    {
-        wprintf(L"Usage: WriteWavFile.exe InputFile OuputFile\n");
-        return -1;
-    }
-
-    hr = MFStartup(MF_VERSION);
-    if (FAILED(hr))
-    {
-        wprintf(L"MFStartup failed!\n");
-    }
-
-    if (SUCCEEDED(hr))
-    {
-        std::vector<std::vector<double>> res = CreateWavFile(argv[1]);
-
-		if(!res.empty())
-        {
-            wprintf(L"Done!\n");
-        }
-        else
-        {
-            wprintf(L"Error: Unable to author file.\n");
-        }
-    }
-
-    MFShutdown();
-
-    return 0;
-}
-
-
-
 
 ///////////////////////////////////////////////////////////////////////
-//  Name: CreateWavFile
-//  Description:  Creates a .wav file from an input file.
+//  Name: ReadMusicFrequencyData
+//  Description:  
 ///////////////////////////////////////////////////////////////////////
 
-std::vector<std::vector<double>> CreateWavFile(const WCHAR *sURL)
+std::vector<std::vector<double>> ReadMusicFrequencyData(const WCHAR *sURL)
 {
     //CComPtr<IMFByteStream> pStream;
     CComPtr<IMFMediaSink> pSink;
@@ -132,7 +92,8 @@ std::vector<std::vector<double>> CreateWavFile(const WCHAR *sURL)
     }
 
 	std::vector<std::vector<double>> data;
-	waveRecord->PullOutData(&data);
+	if(waveRecord)
+		waveRecord->PullOutData(&data);
     return data;
 }
 
@@ -146,7 +107,7 @@ std::vector<std::vector<double>> CreateWavFile(const WCHAR *sURL)
 
 HRESULT RunMediaSession(IMFTopology *pTopology)
 {
-    CComPtr<IMFMediaSession>pSession = NULL;
+    CComPtr<IMFMediaSession> pSession = NULL;
 
     HRESULT hr = S_OK;
     BOOL bGetAnotherEvent = TRUE;
@@ -164,7 +125,7 @@ HRESULT RunMediaSession(IMFTopology *pTopology)
     while (bGetAnotherEvent)
     {
         HRESULT hrStatus = S_OK;
-        CComPtr<IMFMediaEvent> pEvent = NULL;
+        CComPtr<IMFMediaEvent> pEvent;
         MediaEventType meType = MEUnknown;
 
         MF_TOPOSTATUS TopoStatus = MF_TOPOSTATUS_INVALID; // Used with MESessionTopologyStatus event.
@@ -247,6 +208,7 @@ HRESULT RunMediaSession(IMFTopology *pTopology)
     pSession->Shutdown();
 
     PropVariantClear(&varStartPosition);
+
     return hr;
 
 }
@@ -258,14 +220,13 @@ HRESULT GetStreamMajorType(IMFStreamDescriptor *pSD, GUID *pguidMajorType)
     if (pguidMajorType == NULL) { return E_POINTER; }
 
     HRESULT hr = S_OK;
-    IMFMediaTypeHandler *pHandler = NULL;
+    CComPtr<IMFMediaTypeHandler> pHandler = NULL;
 
     hr = pSD->GetMediaTypeHandler(&pHandler);
     if (SUCCEEDED(hr))
     {
         hr = pHandler->GetMajorType(pguidMajorType);
     }
-    SafeRelease(&pHandler);
     return hr;
 }
 

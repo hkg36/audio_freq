@@ -5,6 +5,8 @@
 #pragma once
 
 #include "DIBBitmap.h"
+#include "music_reader.h"
+#include <Mfapi.h>
 class CMainFrame : 
 	public CFrameWindowImpl<CMainFrame>, 
 	public CUpdateUI<CMainFrame>,
@@ -101,46 +103,51 @@ public:
 	LRESULT OnFileNew(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		CFileDialog openfile(TRUE);
-		if(IDOK==openfile.DoModal())
+		if(IDOK!=openfile.DoModal())
+			return S_FALSE;
+
+		/*FILE* fp=NULL;
+		if(0==_tfopen_s(&fp,openfile.m_szFileName,_T("rb")))
 		{
-			FILE* fp=NULL;
-			if(0==_tfopen_s(&fp,openfile.m_szFileName,_T("rb")))
+			dataline.clear();
+			maxStrong=0;
+			while(true)
 			{
-				dataline.clear();
-				maxStrong=0;
+				std::vector<double> buffer(SampleCount/2);
+
+				size_t pos=0;
 				while(true)
 				{
-					std::vector<double> buffer(SampleCount/2);
-					
-					size_t pos=0;
-					while(true)
-					{
-						size_t dcount=fread(&buffer[pos],sizeof(double),SampleCount/2-pos,fp);
-						if(dcount==0)
-							break;
-						pos+=dcount;
-						if(pos==SampleCount/2)
-							break;
-					}
-					if(pos<SampleCount/2)
+					size_t dcount=fread(&buffer[pos],sizeof(double),SampleCount/2-pos,fp);
+					if(dcount==0)
 						break;
-					else
-					{
-						for(size_t i=0;i<SampleCount/2;i++)
-						{
-							maxStrong=max(maxStrong,buffer[i]);
-						}
-						dataline.push_back(std::move(buffer));
-					}
+					pos+=dcount;
+					if(pos==SampleCount/2)
+						break;
 				}
-				fclose(fp);
-
-				m_trackBar.SetRangeMax(100);
-				m_trackBar.SetPos(50);
-				BuildData();
-				BuildImage();
+				if(pos<SampleCount/2)
+					break;
+				else
+				{
+					for(size_t i=0;i<SampleCount/2;i++)
+					{
+						maxStrong=max(maxStrong,buffer[i]);
+					}
+					dataline.push_back(std::move(buffer));
+				}
 			}
+			fclose(fp);
+		}*/
+		if(S_OK != MFStartup(MF_VERSION))
+		{
+			return 0;
 		}
+		dataline= ReadMusicFrequencyData(openfile.m_szFileName);
+		MFShutdown();
+		m_trackBar.SetRangeMax(100);
+		m_trackBar.SetPos(50);
+		BuildData();
+		BuildImage();
 		return 0;
 	}
 	LRESULT OnFileSave(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)

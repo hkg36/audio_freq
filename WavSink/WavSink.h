@@ -65,8 +65,37 @@ IMarker : public IUnknown
     virtual STDMETHODIMP GetContext(PROPVARIANT *pvar) = 0;
 };
 
+MIDL_INTERFACE("25B895AC-A672-483A-B9C6-BDBCA47B21A5")
+IWaveDataRecorder:public IUnknown
+{
+	virtual STDMETHODIMP WaveStart(WAVEFORMATEX *waveFormat)=0;
+	virtual STDMETHODIMP WaveData(void* data,DWORD datalen)=0;
+	virtual STDMETHODIMP WaveProcess()=0;
+	virtual STDMETHODIMP WaveEnd()=0;
+	virtual STDMETHODIMP PullOutData(std::vector<std::vector<double>> *reciver)=0;
+};
 
-
+class CWavRecord:public CComObjectRootEx<CComSingleThreadModel>,public IWaveDataRecorder
+{
+	BEGIN_COM_MAP(CWavRecord)
+		COM_INTERFACE_ENTRY(IWaveDataRecorder)
+	END_COM_MAP()
+	WAVEFORMATEX waveFormat;
+	std::vector<std::vector<double>> m_FreqSamples;
+	std::vector<double> m_FreqSave;
+	static const size_t SampleCount=4096;
+	STDMETHODIMP WaveStart(WAVEFORMATEX *waveFormat);
+	STDMETHODIMP WaveData(void* data,DWORD datalen);
+	STDMETHODIMP WaveProcess();
+	STDMETHODIMP WaveEnd();
+	STDMETHODIMP PullOutData(std::vector<std::vector<double>> *reciver);
+	template<class TYPE>
+	static HRESULT CreateInstanse(TYPE** vp)
+	{
+		return CreateInstanse(__uuidof(TYPE),(void**)vp);
+	}
+	static HRESULT CreateInstanse(const IID &id,void** vp);
+};
 class CWavSink : public IMFFinalizableMediaSink,   // Note: IMFFinalizableMediaSink inherits IMFMediaSink
                  public IMFClockStateSink
 {
@@ -75,7 +104,7 @@ class CWavSink : public IMFFinalizableMediaSink,   // Note: IMFFinalizableMediaS
 
 public:
     // Static method to create the object.
-    static HRESULT CreateInstance(IMFByteStream *pStream, REFIID iid, void **ppSink);
+    static HRESULT CreateInstance(IMFByteStream *pStream,IUnknown* WavRecord, REFIID iid, void **ppSink);
 
     // IUnknown
     STDMETHODIMP QueryInterface(REFIID iid, void** ppv);
@@ -114,7 +143,7 @@ private:
     CWavSink();
     virtual ~CWavSink();
 
-    HRESULT Initialize(IMFByteStream *pByteStream);
+    HRESULT Initialize(IMFByteStream *pByteStream,IUnknown* WavRecord);
 
     HRESULT CheckShutdown() const
     {
@@ -352,8 +381,6 @@ private:
     HRESULT     ProcessSamplesFromQueue(FlushState bFlushData);
     HRESULT     WriteSampleToFile(IMFSample *pSample);
     HRESULT     SendMarkerEvent(IMarker *pMarker, FlushState bFlushData);
-	static const size_t SampleCount=4096;
-	WAVEFORMATEX waveFormat;
 
     long                        m_nRefCount;                // reference count
     CRITICAL_SECTION            m_critSec;                  // critical section for thread safety
@@ -368,17 +395,15 @@ private:
     DWORD                       m_cbDataWritten;            // How many bytes we have written so far.
 
     CWavSink                    *m_pSink;                   // Parent media sink
-
-    IMFMediaEventQueue          *m_pEventQueue;             // Event queue
-    IMFByteStream               *m_pByteStream;             // Bytestream where we write the data.
-    IMFMediaType                *m_pCurrentType;
+	CComPtr<IWaveDataRecorder>  m_pWaveRecorder;
+    CComPtr<IMFMediaEventQueue> m_pEventQueue;             // Event queue
+    CComPtr<IMFByteStream>      m_pByteStream;             // Bytestream where we write the data.
+    CComPtr<IMFMediaType>       m_pCurrentType;
 
 	std::list<CComPtr<IUnknown>>        m_SampleQueue;              // Queue to hold samples and markers.
                                                             // Applies to: ProcessSample, PlaceMarker, BeginFinalize
-	std::vector<std::vector<double>>		m_FreqSamples;
-	std::vector<double> m_FreqSave;
 	
-    IMFAsyncResult              *m_pFinalizeResult;         // Result object for Finalize operation.
+    CComPtr<IMFAsyncResult>     m_pFinalizeResult;         // Result object for Finalize operation.
 
 };
 
