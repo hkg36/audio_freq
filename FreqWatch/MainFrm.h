@@ -100,48 +100,20 @@ public:
 	CDIBBitmap memimage;
 	
 	double maxStrong;
+	CAtlString openFileName;
 	LRESULT OnFileNew(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		CFileDialog openfile(TRUE);
 		if(IDOK!=openfile.DoModal())
 			return S_FALSE;
 
-		/*FILE* fp=NULL;
-		if(0==_tfopen_s(&fp,openfile.m_szFileName,_T("rb")))
-		{
-			dataline.clear();
-			maxStrong=0;
-			while(true)
-			{
-				std::vector<double> buffer(SampleCount/2);
-
-				size_t pos=0;
-				while(true)
-				{
-					size_t dcount=fread(&buffer[pos],sizeof(double),SampleCount/2-pos,fp);
-					if(dcount==0)
-						break;
-					pos+=dcount;
-					if(pos==SampleCount/2)
-						break;
-				}
-				if(pos<SampleCount/2)
-					break;
-				else
-				{
-					for(size_t i=0;i<SampleCount/2;i++)
-					{
-						maxStrong=max(maxStrong,buffer[i]);
-					}
-					dataline.push_back(std::move(buffer));
-				}
-			}
-			fclose(fp);
-		}*/
 		if(S_OK != MFStartup(MF_VERSION))
 		{
 			return 0;
 		}
+		openFileName=openfile.m_szFileName;
+		openFileName=openFileName.Right(openFileName.GetLength()-openFileName.ReverseFind('\\')-1);
+		openFileName=openFileName.Left(openFileName.Find('.'));
 		dataline= ReadMusicFrequencyData(openfile.m_szFileName);
 		MFShutdown();
 		m_trackBar.SetRangeMax(100);
@@ -153,67 +125,87 @@ public:
 	LRESULT OnFileSave(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		CAboutDlg dlg;
+		dlg.filename=openFileName;
 		if(dlg.DoModal()!=IDOK)
 			return S_OK;
-		int song_id=dlg.id;
+		
 		CSqlite db;
 		db.Open(L"D:\\freq_info.data.db");
+		CSqliteStmt insertFileName=db.Prepare(L"insert into songlist(name) values(?1)");
+		CSqliteStmt lastFileId=db.Prepare(L"select last_insert_rowid() from songlist");
 		CSqliteStmt insertAnchor = db.Prepare(L"insert into Anchor_freq_index(freq,time,song_id) values(?1,?2,?3)");
 		CSqliteStmt lastAnchorID = db.Prepare(L"select last_insert_rowid() from Anchor_freq_index");
 		CSqliteStmt insertCheck=db.Prepare(L"insert into Check_freq_index(Anchor_id,freq,time_offset) values(?1,?2,?3)");
 
-		db.Execute(L"begin transaction");
-		std::vector<FreqInfo> freqinfos_use;
-		for(auto i=freqinfos.begin();i<freqinfos.end();i++)
+		int song_id=0;
+		insertFileName.Bind(1,dlg.filename);
+		if(SQLITE_DONE==insertFileName.Step())
 		{
-			if(i->freq>50 && i->freq<400)
+			insertFileName.Reset();
+			if(SQLITE_ROW==lastFileId.Step())
 			{
-				freqinfos_use.push_back(*i);
+				song_id=lastFileId.GetInt(0);
+				lastFileId.Reset();
 			}
 		}
-		int ptcount=0;
-		for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
+
+		if(song_id>0)
 		{
-			std::vector<FreqInfo> anchor_sub;
-			for(auto j=i+1;j<freqinfos_use.end();j++)
+			db.Execute(L"begin transaction");
+			std::vector<FreqInfo> freqinfos_use;
+			for(auto i=freqinfos.begin();i<freqinfos.end();i++)
 			{
-				if(j->time>i->time+45)
-					break;
-				if(j->freq>i->freq-30 && j->freq<i->freq+30 &&
-					j->time>i->time+5)
+				if(i->freq>50 && i->freq<400)
 				{
-					anchor_sub.push_back(*j);
+					freqinfos_use.push_back(*i);
 				}
 			}
-			if(anchor_sub.size()>3)
+			int ptcount=0;
+			for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
 			{
-				insertAnchor.Bind(1,i->freq);
-				insertAnchor.Bind(2,i->time);
-				insertAnchor.Bind(3,song_id);
-				if(SQLITE_DONE==insertAnchor.Step())
+				std::vector<FreqInfo> anchor_sub;
+				for(auto j=i+1;j<freqinfos_use.end();j++)
 				{
-					insertAnchor.Reset();
-					int insert_id=0;
-					if(SQLITE_ROW==lastAnchorID.Step())
+					if(j->time>i->time+45)
+						break;
+					if(j->freq>i->freq-30 && j->freq<i->freq+30 &&
+						j->time>i->time+5)
 					{
-						insert_id=lastAnchorID.GetInt(0);
-						lastAnchorID.Reset();
+						anchor_sub.push_back(*j);
 					}
-					if(insert_id)
+				}
+				if(anchor_sub.size()>3)
+				{
+					insertAnchor.Bind(1,i->freq);
+					insertAnchor.Bind(2,i->time);
+					insertAnchor.Bind(3,song_id);
+					if(SQLITE_DONE==insertAnchor.Step())
 					{
-						for(auto j=anchor_sub.begin();j!=anchor_sub.end();j++)
+						insertAnchor.Reset();
+						int insert_id=0;
+						if(SQLITE_ROW==lastAnchorID.Step())
 						{
-							insertCheck.Bind(1,insert_id);
-							insertCheck.Bind(2,j->freq);
-							insertCheck.Bind(3,j->time-i->time);
-							insertCheck.Step();
-							insertCheck.Reset();
+							insert_id=lastAnchorID.GetInt(0);
+							lastAnchorID.Reset();
+						}
+						if(insert_id)
+						{
+							for(auto j=anchor_sub.begin();j!=anchor_sub.end();j++)
+							{
+								insertCheck.Bind(1,insert_id);
+								insertCheck.Bind(2,j->freq);
+								insertCheck.Bind(3,j->time-i->time);
+								insertCheck.Step();
+								insertCheck.Reset();
+							}
 						}
 					}
 				}
 			}
+			db.Execute(L"commit transaction");
 		}
-		db.Execute(L"commit transaction");
+		insertFileName.Close();
+		lastFileId.Close();
 		insertAnchor.Close();
 		lastAnchorID.Close();
 		insertCheck.Close();
@@ -249,6 +241,7 @@ public:
 			}
 		}
 		int ptcount=0;
+		size_t maybecount=0;
 		vector<FreqPointPicked> checkres;
 		for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
 		{
@@ -267,7 +260,7 @@ public:
 			
 			if(maybeid.empty())
 				continue;
-
+			maybecount+=maybeid.size();
 			for(auto maybe=maybeid.begin();maybe!=maybeid.end();maybe++)
 			{
 				int match_count=0;
@@ -312,10 +305,19 @@ public:
 		findCheckPoint.Close();
 		db.Close();
 
+		CAtlString resinfo;
+		resinfo.AppendFormat(_T("all Anchor checked:%u\n"),maybecount);
+		std::map<int,int> matchcountor;
 		for(auto i=checkres.begin();i!=checkres.end();i++)
 		{
-			ATLTRACE(_T("match found,%d,%d,%d,%d\n"),i->song_id,i->freq,i->time,i->sample_time);
+			resinfo.AppendFormat(_T("match found,%d,%d,%d,%d\n"),i->song_id,i->freq,i->time,i->sample_time);
+			matchcountor[i->song_id]+=1;
 		}
+		for(auto i=matchcountor.begin();i!=matchcountor.end();++i)
+		{
+			resinfo.AppendFormat(_T("found song:%d (%d time)\n"),i->first,i->second);
+		}
+		MessageBox(resinfo);
 		return S_OK;
 	}
 	
@@ -324,7 +326,7 @@ public:
 	void BuildData()
 	{
 		darklines.clear();
-		for(int i=0;i!=dataline.size();i++)
+		for(size_t i=0;i!=dataline.size();i++)
 		{
 			std::vector<double> line(SampleCount/2);
 			for(size_t j=0;j<SampleCount/2;j++)
@@ -443,7 +445,7 @@ public:
 
 				double strong=darklines[i][j];
 				strong=min(strong/((double)m_trackBar.GetPos()/100),1);
-				memimage.SetPixel(j,i,strong*255+(1-strong)*back[0],(1-strong)*back[1],(1-strong)*back[2]);
+				memimage.SetPixel(j,i,(BYTE)(strong*255+(1-strong)*back[0]),(BYTE)((1-strong)*back[1]),(BYTE)((1-strong)*back[2]));
 			}
 		}
 
@@ -505,7 +507,7 @@ public:
 		CPoint p;
 		p.x=wParam;
 		p.y=lParam;
-		if(p.x<SampleCount/2 && p.y<darklines.size())
+		if(p.x<SampleCount/2 && p.y<(int)darklines.size())
 		{
 			CAtlString str;
 			str.Format(_T("%d,%d==>%.5f"),p.x,p.y,darklines[p.y][p.x]);

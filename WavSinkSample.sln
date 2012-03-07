@@ -11,6 +11,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WriteWavFile", "WriteWavFile\WriteWavFile.vcxproj", "{3A049B3F-E9C2-4B3A-941C-AE49C02ECA18}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FreqWatch", "FreqWatch\FreqWatch.vcxproj", "{2B6C0C95-32F5-46AA-A3F0-545B5B3C827D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D2F665AB-E49E-4FF5-BC56-9FC9E1AEE3D9} = {D2F665AB-E49E-4FF5-BC56-9FC9E1AEE3D9}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

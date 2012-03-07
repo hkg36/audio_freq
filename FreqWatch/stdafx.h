@@ -16,6 +16,7 @@
 #include <atltypes.h>
 #include <atlapp.h>
 #include <vector>
+#include <map>
 #include <atlmisc.h>
 #include <atlimage.h>
 #include <atlscrl.h>

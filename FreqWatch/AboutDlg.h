@@ -19,9 +19,11 @@ public:
 //	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 //	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 //	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
-	int id;
+	CAtlString filename;
 	LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
+		CEdit edit=GetDlgItem(IDC_EDIT1);
+		edit.SetWindowText(filename);
 		CenterWindow(GetParent());
 		return TRUE;
 	}
@@ -29,9 +31,7 @@ public:
 	LRESULT OnOKCmd(WORD /*wNotifyCode*/, WORD wID, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		CEdit edit=GetDlgItem(IDC_EDIT1);
-		CAtlString str;
-		edit.GetWindowText(str);
-		id=_tstoi(str);
+		edit.GetWindowText(filename);
 		EndDialog(wID);
 		return 0;
 	}
