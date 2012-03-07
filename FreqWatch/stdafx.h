@@ -32,6 +32,7 @@ extern CAppModule _Module;
 
 #include <extools.h>
 #include <CSqlite.h>
+#include <JsonLib.h>
 
 #ifdef _DEBUG
 #pragma comment(lib,"ExLibd.lib")

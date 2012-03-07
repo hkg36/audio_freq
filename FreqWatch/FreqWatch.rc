@@ -31,7 +31,7 @@ BEGIN
         MENUITEM "打开音频数据\tCtrl+N",              ID_FILE_NEW
         MENUITEM "查询音频匹配\tCtrl+O",              ID_FILE_OPEN
         MENUITEM "保存音频数据\tCtrl+S",              ID_FILE_SAVE
-        MENUITEM "Save &As...",                 ID_FILE_SAVE_AS
+        MENUITEM "上传数据",                        ID_FILE_SAVE_AS
         MENUITEM SEPARATOR
         MENUITEM "&Print...\tCtrl+P",           ID_FILE_PRINT
         MENUITEM "Print Pre&view",              ID_FILE_PRINT_PREVIEW

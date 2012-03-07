@@ -7,6 +7,7 @@
 #include "DIBBitmap.h"
 #include "music_reader.h"
 #include <Mfapi.h>
+#include "UploadFreqData.h"
 class CMainFrame : 
 	public CFrameWindowImpl<CMainFrame>, 
 	public CUpdateUI<CMainFrame>,
@@ -45,6 +46,7 @@ public:
 		COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
 		COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
 		COMMAND_ID_HANDLER(ID_FILE_SAVE,OnFileSave)
+		COMMAND_ID_HANDLER(ID_FILE_SAVE_AS,OnUploadData)
 		COMMAND_ID_HANDLER(ID_FILE_OPEN,OnFileOpen)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
@@ -128,7 +130,12 @@ public:
 		dlg.filename=openFileName;
 		if(dlg.DoModal()!=IDOK)
 			return S_OK;
-		
+		dlg.filename.Trim(L"\t\n ");
+		if(dlg.filename.IsEmpty())
+		{
+			MessageBox(L"歌曲名是空的,请检查.");
+			return S_OK;
+		}
 		CSqlite db;
 		db.Open(L"D:\\freq_info.data.db");
 		CSqliteStmt insertFileName=db.Prepare(L"insert into songlist(name) values(?1)");
@@ -141,13 +148,13 @@ public:
 		insertFileName.Bind(1,dlg.filename);
 		if(SQLITE_DONE==insertFileName.Step())
 		{
-			insertFileName.Reset();
 			if(SQLITE_ROW==lastFileId.Step())
 			{
 				song_id=lastFileId.GetInt(0);
-				lastFileId.Reset();
 			}
+			lastFileId.Reset();
 		}
+		insertFileName.Reset();
 
 		if(song_id>0)
 		{
@@ -318,6 +325,12 @@ public:
 			resinfo.AppendFormat(_T("found song:%d (%d time)\n"),i->first,i->second);
 		}
 		MessageBox(resinfo);
+		return S_OK;
+	}
+	LRESULT OnUploadData(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		CUploadFreqData uploaddata;
+		while(uploaddata.DoUpload()>0);
 		return S_OK;
 	}
 	
