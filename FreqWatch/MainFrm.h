@@ -338,7 +338,15 @@ public:
 	LRESULT OnSearchVarSite(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		CSearchBySite serachbysite(freqinfos);
-		serachbysite.StartSearch();
+		if(serachbysite.StartSearch())
+		{
+			CAtlString resinfo;
+			for(auto i=serachbysite.songresult.begin();i!=serachbysite.songresult.end();i++)
+			{
+				resinfo.AppendFormat(_T("song_id:%d match:%d name:%s"),i->song_id,i->match_count,i->filename);
+			}
+			MessageBox(resinfo);
+		}
 		return S_OK;
 	}
 	

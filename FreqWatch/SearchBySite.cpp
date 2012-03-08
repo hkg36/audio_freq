@@ -13,9 +13,10 @@ CSearchBySite::~CSearchBySite(void)
 
 bool CSearchBySite::StartSearch()
 {
+	songresult.clear();
 	json2::CJsonObject mainobj;
 
-	mainobj.PutBool(L"procinfo",true);
+	//mainobj.PutBool(L"procinfo",true);
 	json2::PJsonArray dataarray=new json2::CJsonArray();
 	mainobj.PutValue(L"data",dataarray);
 
@@ -55,10 +56,23 @@ bool CSearchBySite::StartSearch()
 
 			json2::PJsonObject resobj;
 			resobj=json2::CJsonReader::Prase((LPCSTR)memstream->GetBuffer(),(unsigned int)memstream->GetBufferSize());
+
+			int server_errno=resobj->GetNumber(L"errno");
+			CAtlString server_error=resobj->GetString(L"error");
+			json2::PJsonArray songlist=resobj->Get(L"data");
+			for(size_t i=0;i<songlist->Size();i++)
+			{
+				json2::PJsonObject song=songlist->Get(i);
+				SongResult oneresult;
+				oneresult.song_id=song->GetNumber(L"song_id");
+				oneresult.match_count=song->GetNumber(L"count");
+				oneresult.filename=song->GetString(L"filename");
+				songresult.push_back(oneresult);
+			}
 		}
 		else
 			int ss=0;
 	}
 
-	return true;
+	return !songresult.empty();
 }
