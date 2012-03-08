@@ -101,7 +101,50 @@ int CUploadFreqData::DoUpload()
 		}
 	}
 
-	StringOutput strout;
+	GZipOutput strout;
 	mainobj.Save(strout);
-	return 0;
+	strout.Flush();
+
+	CSockAddr saddr(L"liveplustest.sinaapp.com",L"80");
+	HTTPClient::SocketEx socket;
+
+	HTTPClient::HttpRequest request("POST","/music/uploadSongFreqData.php");
+	request.setHost("liveplustest.sinaapp.com");
+	request.setContentType("gzip/json");
+	request.setContentLength(strout.memstream->GetBufferSize());
+	int uploaded_songid=0;
+	if(0==socket.Connect(saddr.Addr(),saddr.Len()))
+	{
+		request.SendRequest(&socket);
+		socket.Send((const char*)strout.memstream->GetBuffer(),strout.memstream->GetBufferSize());
+
+		HTTPClient::HttpResponse response;
+		if(response.RecvResponseHead(&socket))
+		{
+			CComPtr<IMemoryStream> memstream;
+			CComQIPtr<IStream> outstream;
+			ByteStream::CreateInstanse(&memstream);
+			outstream=memstream;
+			response.RecvResponseBody(&socket,outstream);
+
+			json2::PJsonObject resobj;
+			resobj=json2::CJsonReader::Prase((LPCSTR)memstream->GetBuffer(),(unsigned int)memstream->GetBufferSize());
+			int server_errno=resobj->GetNumber(L"errno");
+			CAtlString error=resobj->GetString("error");
+			json2::PJsonObject data=resobj->Get(L"data");
+			int server_song_id=data->GetNumber(L"song_id");
+			CAtlString server_song_name=data->GetString(L"song_name");
+
+			if(server_errno==0)
+			{
+				uploaded_songid=songid;
+				writeOption.Bind(1,L"lastUploadSong");
+				writeOption.Bind(2,songid);
+				writeOption.Step();
+				writeOption.Reset();
+			}
+		}
+	}
+	
+	return uploaded_songid;
 }

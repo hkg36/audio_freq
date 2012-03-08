@@ -33,11 +33,14 @@ extern CAppModule _Module;
 #include <extools.h>
 #include <CSqlite.h>
 #include <JsonLib.h>
+#include <HttpClient.h>
 
 #ifdef _DEBUG
 #pragma comment(lib,"ExLibd.lib")
+#pragma comment(lib,"zlibd.lib")
 #else
 #pragma comment(lib,"ExLibInline.lib")
+#pragma comment(lib,"zlib.lib")
 #endif
 
 #ifdef _DEBUG
@@ -49,6 +52,7 @@ extern CAppModule _Module;
 #pragma comment(lib,"mfplat.lib")
 #pragma comment(lib,"mfuuid.lib")
 #pragma comment(lib,"mf.lib")
+#pragma comment(lib,"ws2_32.lib")
 #ifdef _DEBUG
 #pragma comment(lib,"..\\Debug\\WavSink.lib")
 #else
@@ -64,3 +68,36 @@ extern CAppModule _Module;
 #else
   #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif
+
+#include <ByteStream.h>
+#include <gzipcap2.h>
+struct GZipOutput:public OutputInterface
+{
+	GZipOutput():OutputInterface(WriteF,WriteCharF)
+	{
+		ByteStream::CreateInstanse(&memstream);
+		CComPtr<IStream> tempstream;
+		memstream->QueryInterface(&tempstream);
+		zipcap.Reset(tempstream);
+	}
+	void Flush()
+	{
+		zipcap.Finish();
+	}
+	GZIPCap2 zipcap;
+	CComPtr<IMemoryStream> memstream;
+	static void WriteF(OutputInterface*This,LPCSTR str,int strlen)
+	{
+		((GZipOutput*)This)->zipcap.Write(str,strlen);
+	}
+	static void WriteCharF(OutputInterface*This,char c)
+	{
+		((GZipOutput*)This)->zipcap.Write(&c,1);
+	}
+};
+struct FreqInfo
+{
+	int freq;
+	int time;
+	double strong;
+};

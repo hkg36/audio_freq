@@ -6,12 +6,7 @@
 #include "DIBBitmap.h"
 static const size_t SampleCount=4096;
 const int WM_CLIENTMOUSEMOVE=WM_USER+1;
-struct FreqInfo
-{
-	int freq;
-	int time;
-	double strong;
-};
+
 class CFreqWatchView : public CScrollWindowImpl<CFreqWatchView>
 {
 public:

@@ -8,6 +8,7 @@
 #include "music_reader.h"
 #include <Mfapi.h>
 #include "UploadFreqData.h"
+#include "SearchBySite.h"
 class CMainFrame : 
 	public CFrameWindowImpl<CMainFrame>, 
 	public CUpdateUI<CMainFrame>,
@@ -48,6 +49,7 @@ public:
 		COMMAND_ID_HANDLER(ID_FILE_SAVE,OnFileSave)
 		COMMAND_ID_HANDLER(ID_FILE_SAVE_AS,OnUploadData)
 		COMMAND_ID_HANDLER(ID_FILE_OPEN,OnFileOpen)
+		COMMAND_ID_HANDLER(ID_FILE_SEARCH_VAR_SITE,OnSearchVarSite)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
 		CHAIN_MSG_MAP(CUpdateUI<CMainFrame>)
@@ -331,6 +333,12 @@ public:
 	{
 		CUploadFreqData uploaddata;
 		while(uploaddata.DoUpload()>0);
+		return S_OK;
+	}
+	LRESULT OnSearchVarSite(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		CSearchBySite serachbysite(freqinfos);
+		serachbysite.StartSearch();
 		return S_OK;
 	}
 	

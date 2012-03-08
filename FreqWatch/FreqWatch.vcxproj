@@ -115,6 +115,7 @@
   <ItemGroup>
     <ClCompile Include="FreqWatch.cpp" />
     <ClCompile Include="music_reader.cpp" />
+    <ClCompile Include="SearchBySite.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
@@ -128,6 +129,7 @@
     <ClInclude Include="MainFrm.h" />
     <ClInclude Include="music_reader.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="SearchBySite.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="UploadFreqData.h" />
   </ItemGroup>

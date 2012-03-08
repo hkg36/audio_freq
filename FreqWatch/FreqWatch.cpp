@@ -52,7 +52,11 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	hRes = _Module.Init(NULL, hInstance);
 	ATLASSERT(SUCCEEDED(hRes));
 
+	WSADATA wsadata;
+
+	WSAStartup(MAKEWORD(2,2),&wsadata);
 	int nRet = Run(lpstrCmdLine, nCmdShow);
+	WSACleanup();
 
 	_Module.Term();
 	::CoUninitialize();
