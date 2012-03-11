@@ -51,6 +51,7 @@ public:
 		COMMAND_ID_HANDLER(ID_FILE_OPEN,OnFileOpen)
 		COMMAND_ID_HANDLER(ID_FILE_SEARCH_VAR_SITE,OnSearchVarSite)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
+		COMMAND_ID_HANDLER(ID_FILE_RECORD,OnFileRecord)
 		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
 		CHAIN_MSG_MAP(CUpdateUI<CMainFrame>)
 		CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
@@ -164,7 +165,7 @@ public:
 			std::vector<FreqInfo> freqinfos_use;
 			for(auto i=freqinfos.begin();i<freqinfos.end();i++)
 			{
-				if(i->freq>50 && i->freq<400)
+				if(i->freq>20 && i->freq<400)
 				{
 					freqinfos_use.push_back(*i);
 				}
@@ -234,6 +235,7 @@ public:
 		{
 			int sample_time;
 			int match_count;
+			int start_time_point;
 		};
 
 		CSqlite db;
@@ -244,7 +246,7 @@ public:
 		std::vector<FreqInfo> freqinfos_use;
 		for(auto i=freqinfos.begin();i<freqinfos.end();i++)
 		{
-			if(i->freq>50 && i->freq<400)
+			if(i->freq>20 && i->freq<400)
 			{
 				freqinfos_use.push_back(*i);
 			}
@@ -296,7 +298,7 @@ public:
 						findCheckPoint.Reset();
 					}
 				}
-				if(match_count>2)
+				if(match_count>=2)
 				{
 					FreqPointPicked picked;
 					picked.id=maybe->id;
@@ -305,6 +307,7 @@ public:
 					picked.song_id=maybe->song_id;
 					picked.match_count=match_count;
 					picked.sample_time=i->time;
+					picked.start_time_point=picked.time-picked.sample_time;
 					checkres.push_back(picked);
 				}
 			}
@@ -316,15 +319,44 @@ public:
 
 		CAtlString resinfo;
 		resinfo.AppendFormat(_T("all Anchor checked:%u\n"),maybecount);
-		std::map<int,int> matchcountor;
+		struct MatchInfo
+		{
+			int count;
+			int starttimeMaxCount;
+			std::map<int,int> timematch;
+			MatchInfo()
+			{
+				count=0;
+				starttimeMaxCount=0;
+			}
+		};
+		std::map<int,MatchInfo> matchcountor;
 		for(auto i=checkres.begin();i!=checkres.end();i++)
 		{
-			resinfo.AppendFormat(_T("match found,%d,%d,%d,%d\n"),i->song_id,i->freq,i->time,i->sample_time);
-			matchcountor[i->song_id]+=1;
+			auto& countor=matchcountor[i->song_id];
+			countor.count++;
+			countor.timematch[i->start_time_point]++;
 		}
+		for(auto countor=matchcountor.begin();countor!=matchcountor.end();countor++)
+		{
+			int maxpos=0;
+			int maxcount=0;
+			for(auto j=countor->second.timematch.begin();
+				j!=countor->second.timematch.end();
+				j++)
+			{
+				if(j->second>maxcount)
+				{
+					maxcount=j->second;
+					maxpos=j->first;
+				}
+			}
+			countor->second.starttimeMaxCount=maxcount;
+		}
+
 		for(auto i=matchcountor.begin();i!=matchcountor.end();++i)
 		{
-			resinfo.AppendFormat(_T("found song:%d (%d time)\n"),i->first,i->second);
+			resinfo.AppendFormat(_T("found song:%d (%d time,startMatch %d)\n"),i->first,i->second.count,i->second.starttimeMaxCount);
 		}
 		MessageBox(resinfo);
 		return S_OK;
@@ -343,11 +375,117 @@ public:
 			CAtlString resinfo;
 			for(auto i=serachbysite.songresult.begin();i!=serachbysite.songresult.end();i++)
 			{
-				resinfo.AppendFormat(_T("song_id:%d match:%d name:%s"),i->song_id,i->match_count,i->filename);
+				resinfo.AppendFormat(_T("song_id:%d match:%d name:%s\n"),i->song_id,i->match_count,i->filename);
 			}
 			MessageBox(resinfo);
 		}
 		return S_OK;
+	}
+
+	bool runing;
+	LRESULT OnFileRecord(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		MMRESULT mmres;
+		HWAVEIN hwi;
+		WAVEHDR whdr,whdr1;
+		UINT devId;
+		WAVEFORMATEX wFormatEx;
+		short outsample1[SampleCount];
+		short outsample2[SampleCount];
+
+		wFormatEx.wFormatTag = WAVE_FORMAT_PCM;
+		wFormatEx.nChannels = 1;
+		wFormatEx.wBitsPerSample = 16;
+		wFormatEx.nSamplesPerSec = 44100;
+		wFormatEx.nBlockAlign = wFormatEx.wBitsPerSample * wFormatEx.nChannels / 8;
+		wFormatEx.nAvgBytesPerSec = wFormatEx.nSamplesPerSec* wFormatEx.nBlockAlign;
+
+		// Open audio device
+		debugstring(_T("\nwave in num %d\n"),waveInGetNumDevs());
+		for (devId = 0; devId < waveInGetNumDevs(); devId++) {
+			mmres = waveInOpen(&hwi, devId, &wFormatEx, (DWORD_PTR)CMainFrame::waveInProc,
+				(DWORD_PTR)this, CALLBACK_FUNCTION);
+			if (mmres == MMSYSERR_NOERROR) {
+				break;
+			}
+		}
+		if (mmres != MMSYSERR_NOERROR)
+		{
+			debugstring(_T("1-%d"),mmres);
+			return S_FALSE;
+		}
+
+		ZeroMemory(&whdr, sizeof(WAVEHDR));
+		whdr.lpData = (LPSTR)outsample1;
+		whdr.dwBufferLength = sizeof(outsample1);
+
+		ZeroMemory(&whdr1, sizeof(WAVEHDR));
+		whdr1.lpData = (LPSTR)outsample2;
+		whdr1.dwBufferLength = sizeof(outsample2);
+
+		mmres = waveInPrepareHeader(hwi, &whdr, sizeof(WAVEHDR));
+		if (mmres != MMSYSERR_NOERROR)
+		{
+			return FALSE;
+		}
+
+		mmres = waveInPrepareHeader(hwi, &whdr1, sizeof(WAVEHDR));
+		if (mmres != MMSYSERR_NOERROR)
+		{
+			return FALSE;
+		}
+		
+		mmres=waveInAddBuffer(hwi,&whdr,sizeof(WAVEHDR));
+		mmres=waveInAddBuffer(hwi,&whdr1,sizeof(WAVEHDR));
+		runing=true;
+		dataline.clear();
+		mmres=waveInStart(hwi);
+
+		MessageBox(_T("µãÈ·¶¨Í£Ö¹Â¼Òô"));
+
+		runing=false;
+		mmres=waveInStop(hwi);
+		mmres=waveInReset(hwi);
+		mmres=waveInUnprepareHeader(hwi,&whdr, sizeof(WAVEHDR));
+		mmres=waveInUnprepareHeader(hwi,&whdr1, sizeof(WAVEHDR));
+		mmres=waveInClose(hwi);
+
+		m_trackBar.SetRangeMax(100);
+		m_trackBar.SetPos(50);
+		this->BuildData();
+		this->BuildImage();
+		return S_OK;
+	}
+	static void CALLBACK waveInProc(
+		HWAVEIN hwi,
+		UINT uMsg,
+		DWORD_PTR dwInstance,
+		DWORD_PTR dwParam1,
+		DWORD_PTR dwParam2
+		)
+	{
+		CMainFrame *view=(CMainFrame*)dwInstance;
+		if(view->runing && WIM_DATA==uMsg)
+		{
+			WAVEHDR *hdr=(WAVEHDR *)dwParam1;
+			view->ProcessBuffer((short*)hdr->lpData,hdr->dwBytesRecorded/sizeof(short));
+			MMRESULT mmres;
+			hdr->dwFlags&=~WHDR_DONE;
+			mmres = waveInAddBuffer(hwi, hdr, sizeof(WAVEHDR));
+			if (mmres != MMSYSERR_NOERROR)
+			{
+				return ;
+			}
+		}
+	}
+	void ProcessBuffer(short *buffer,int count)
+	{
+		if(count!=SampleCount)
+			return;
+		std::vector<double> line;
+		for(int i=0;i<count;i++)
+			line.push_back(*(buffer+i));
+		dataline.push_back(std::move(line));
 	}
 	
 	std::vector<std::vector<double>> darklines;
@@ -355,16 +493,13 @@ public:
 	void BuildData()
 	{
 		darklines.clear();
-		for(size_t i=0;i!=dataline.size();i++)
+		const int checkR=1;
+		for(size_t i=checkR;i!=dataline.size()-checkR;i++)
 		{
 			std::vector<double> line(SampleCount/2);
-			for(size_t j=0;j<SampleCount/2;j++)
+			for(size_t j=checkR;j<SampleCount/2-checkR;j++)
 			{
-				const int checkR=1;
-				if(i>=checkR && i<dataline.size()-checkR && j>=checkR && j<SampleCount/2-checkR)
-				{
-					double maxv=0,minv=1e10;
-					const double core1[3][3]={
+					/*const double core1[3][3]={
 						{-1,0,1},
 						{-2,0,2},
 						{-1,0,1}
@@ -386,11 +521,27 @@ public:
 						}
 					}
 					double gpoint=sqrt(gx*gx+gy*gy);
-					line[j]=gpoint;
+					line[j]=gpoint;*/
+				const double core1[3][3]={
+					{-1,-2,-1},
+					{-2,13,-2},
+					{-1,-2,-1}
+				};
+				double gx=0;
+				for(int testi=-checkR;testi<checkR;testi++)
+				{
+					for(int testj=-checkR;testj<checkR;testj++)
+					{
+						double v=dataline[i+testi][j+testj];
+						gx+=v*core1[testi+1][testj+1];
+					}
 				}
+				if(gx>0)
+					line[j]=gx;
 			}
 			darklines.push_back(std::move(line));
 		}
+		//darklines=dataline;
 		double darkmax=0,darkmin=1e20;
 		for(int i=1;i!=darklines.size()-1;i++)
 		{
@@ -418,7 +569,7 @@ public:
 			for(size_t j=area;j<SampleCount/2-area;j++)
 			{
 				double strong=darklines[i][j];
-				if(strong>0.13)
+				if(strong>0.12)
 				{
 					double maxstrong=strong;
 					for(int x=-area;x<=area;x++)
@@ -426,19 +577,16 @@ public:
 						for(int y=-area;y<=area;y++)
 						{
 							maxstrong=max(maxstrong,darklines[i+x][j+y]);
-							if(maxstrong>strong)
-								goto LOOPEND;
-							/*if(x!=0 && y!=0)
+							if(!(x==0 && y==0))
 							{
 								double other=darklines[i+x][j+y];
 								if(other>strong)
 								{
 									goto NEXT;
 								}
-							}*/
+							}
 						}
 					}
-					LOOPEND:
 					if(maxstrong==strong)
 					{
 						FreqInfo info;
@@ -447,6 +595,7 @@ public:
 						info.strong=strong;
 						freqinfos.push_back(info);
 					}
+					NEXT:;
 				}
 				//NEXT:;
 			}

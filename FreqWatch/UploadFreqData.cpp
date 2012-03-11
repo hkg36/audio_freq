@@ -44,6 +44,7 @@ int CUploadFreqData::DoUpload()
 	readOption.Reset();
 
 	getNextSongToUpload.Bind(1,songid);
+	songid=0;
 	if(getNextSongToUpload.Step()==SQLITE_ROW)
 	{
 		songid=getNextSongToUpload.GetInt(0);
@@ -63,6 +64,8 @@ int CUploadFreqData::DoUpload()
 		anchorlist.push_back(std::move(info));
 	}
 	getAnchorPoint.Reset();
+	if(songid==0)
+		return 0;
 
 	for(auto i=anchorlist.begin();i!=anchorlist.end();++i)
 	{

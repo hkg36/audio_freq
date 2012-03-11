@@ -2337,10 +2337,20 @@ STDMETHODIMP CWavRecord::WaveStart(WAVEFORMATEX *waveFormat)
 STDMETHODIMP CWavRecord::WaveData(void* data,DWORD datalen)
 {
 	int count=datalen/2;
-	for(int s=0;s<count;s+=waveFormat.nChannels)
+	if(waveFormat.nChannels==1)
 	{
-		m_FreqSave.push_back(((short*)data)[s]);
+		m_FreqSave.insert(m_FreqSave.end(),(short*)data,((short*)data)+count);
 	}
+	else if(waveFormat.nChannels==2)
+	{
+		for(int i=0;i<count;i+=2)
+		{
+			double left=(double)*(((short*)data)+i);
+			double right=(double)*(((short*)data)+i+1);
+			m_FreqSave.push_back((left+right)/2);
+		}
+	}
+	
 	return S_OK;
 }
 STDMETHODIMP CWavRecord::WaveProcess()

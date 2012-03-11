@@ -71,8 +71,15 @@ bool CSearchBySite::StartSearch()
 			}
 		}
 		else
-			int ss=0;
+		{
+			CComPtr<IMemoryStream> memstream;
+			CComQIPtr<IStream> outstream;
+			ByteStream::CreateInstanse(&memstream);
+			outstream=memstream;
+			response.RecvResponseBody(&socket,outstream);
+			return false;
+		}
 	}
 
-	return !songresult.empty();
+	return true;
 }

@@ -92,7 +92,7 @@ std::vector<std::vector<double>> CreateWavFile(const WCHAR *sURL)
 	CComPtr<IWaveDataRecorder> waveRecord;
 	HRESULT hr=0;
 	hr=CWavRecord::CreateInstanse(&waveRecord);
-    //hr = MFCreateFile(MF_ACCESSMODE_WRITE, MF_OPENMODE_DELETE_IF_EXIST, MF_FILEFLAGS_NONE, sOutputFile, &pStream);
+   // hr = MFCreateFile(MF_ACCESSMODE_WRITE, MF_OPENMODE_DELETE_IF_EXIST, MF_FILEFLAGS_NONE, L"D:\\out.wav", &pStream);
     if (FAILED(hr))
     {
         wprintf(L"MFCreateFile failed!\n");

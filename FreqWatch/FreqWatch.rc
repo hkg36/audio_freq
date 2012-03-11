@@ -33,6 +33,7 @@ BEGIN
         MENUITEM "保存音频数据\tCtrl+S",              ID_FILE_SAVE
         MENUITEM "上传数据",                        ID_FILE_SAVE_AS
         MENUITEM "使用网站查询匹配",                    ID_FILE_SEARCH_VAR_SITE
+        MENUITEM "录音",                          ID_FILE_RECORD
         MENUITEM SEPARATOR
         MENUITEM "E&xit",                       ID_APP_EXIT
     END

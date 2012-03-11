@@ -53,6 +53,7 @@ extern CAppModule _Module;
 #pragma comment(lib,"mfuuid.lib")
 #pragma comment(lib,"mf.lib")
 #pragma comment(lib,"ws2_32.lib")
+#pragma comment(lib,"Winmm.lib")
 #ifdef _DEBUG
 #pragma comment(lib,"..\\Debug\\WavSink.lib")
 #else
