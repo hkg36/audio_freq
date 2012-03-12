@@ -9,6 +9,7 @@
 #include <Mfapi.h>
 #include "UploadFreqData.h"
 #include "SearchBySite.h"
+#include "..\WavSink\Fourier.h"
 class CMainFrame : 
 	public CFrameWindowImpl<CMainFrame>, 
 	public CUpdateUI<CMainFrame>,
@@ -165,7 +166,7 @@ public:
 			std::vector<FreqInfo> freqinfos_use;
 			for(auto i=freqinfos.begin();i<freqinfos.end();i++)
 			{
-				if(i->freq>20 && i->freq<400)
+				if(i->freq>40 && i->freq<600)
 				{
 					freqinfos_use.push_back(*i);
 				}
@@ -337,6 +338,8 @@ public:
 			countor.count++;
 			countor.timematch[i->start_time_point]++;
 		}
+
+		
 		for(auto countor=matchcountor.begin();countor!=matchcountor.end();countor++)
 		{
 			int maxpos=0;
@@ -350,6 +353,11 @@ public:
 					maxcount=j->second;
 					maxpos=j->first;
 				}
+			}
+			maxcount=0;
+			for(int fr=maxpos-3;fr<=maxpos+3;fr++)
+			{
+				maxcount+=countor->second.timematch[fr];
 			}
 			countor->second.starttimeMaxCount=maxcount;
 		}
@@ -485,7 +493,14 @@ public:
 		std::vector<double> line;
 		for(int i=0;i<count;i++)
 			line.push_back(*(buffer+i));
-		dataline.push_back(std::move(line));
+		std::vector<double> outR(SampleCount),outI(SampleCount);
+		fft_double(SampleCount,false,&line[0],nullptr,&outR[0],&outI[0]);
+		std::vector<double> freqRes(SampleCount/2);
+		for(int i=0;i<SampleCount/2;i++)
+		{
+			freqRes[i]=sqrt(outR[i]*outR[i]+outI[i]*outI[i]);
+		}
+		dataline.push_back(freqRes);
 	}
 	
 	std::vector<std::vector<double>> darklines;
@@ -537,7 +552,7 @@ public:
 					}
 				}
 				if(gx>0)
-					line[j]=gx;
+					line[j]=sqrt(gx);
 			}
 			darklines.push_back(std::move(line));
 		}
@@ -569,14 +584,13 @@ public:
 			for(size_t j=area;j<SampleCount/2-area;j++)
 			{
 				double strong=darklines[i][j];
-				if(strong>0.12)
+				if(strong>0.35)
 				{
 					double maxstrong=strong;
 					for(int x=-area;x<=area;x++)
 					{
 						for(int y=-area;y<=area;y++)
 						{
-							maxstrong=max(maxstrong,darklines[i+x][j+y]);
 							if(!(x==0 && y==0))
 							{
 								double other=darklines[i+x][j+y];
@@ -587,15 +601,12 @@ public:
 							}
 						}
 					}
-					if(maxstrong==strong)
-					{
-						FreqInfo info;
-						info.freq=j;
-						info.time=i;
-						info.strong=strong;
-						freqinfos.push_back(info);
-					}
-					NEXT:;
+					FreqInfo info;
+					info.freq=j;
+					info.time=i;
+					info.strong=strong;
+					freqinfos.push_back(info);
+NEXT:;
 				}
 				//NEXT:;
 			}

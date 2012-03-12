@@ -4,7 +4,7 @@
 
 #pragma once
 #include "DIBBitmap.h"
-static const size_t SampleCount=4096;
+static const size_t SampleCount=8192;
 const int WM_CLIENTMOUSEMOVE=WM_USER+1;
 
 class CFreqWatchView : public CScrollWindowImpl<CFreqWatchView>
@@ -55,7 +55,7 @@ public:
 		dc.SelectPen(linepen);
 		CSize scsize;
 		GetScrollSize(scsize);
-		for(size_t j=20;j<SampleCount/2;j+=40)
+		for(size_t j=0;j<SampleCount/2;j+=50)
 		{
 			dc.MoveTo(j,0);
 			dc.LineTo(j,scsize.cy-1);

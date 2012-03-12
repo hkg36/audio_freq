@@ -83,7 +83,7 @@ class CWavRecord:public CComObjectRootEx<CComSingleThreadModel>,public IWaveData
 	WAVEFORMATEX waveFormat;
 	std::vector<std::vector<double>> m_FreqSamples;
 	std::vector<double> m_FreqSave;
-	static const size_t SampleCount=4096;
+	static const size_t SampleCount=8192;
 	STDMETHODIMP WaveStart(WAVEFORMATEX *waveFormat);
 	STDMETHODIMP WaveData(void* data,DWORD datalen);
 	STDMETHODIMP WaveProcess();

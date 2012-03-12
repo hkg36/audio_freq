@@ -2347,7 +2347,16 @@ STDMETHODIMP CWavRecord::WaveData(void* data,DWORD datalen)
 		{
 			double left=(double)*(((short*)data)+i);
 			double right=(double)*(((short*)data)+i+1);
-			m_FreqSave.push_back((left+right)/2);
+			double value=0;
+			if ((left < 0) && (right < 0))
+			{
+				value = left + right - (left * right / -(2^(16-1)-1));
+			}
+			else
+			{
+				value = left + right - (left * right / (2^(16-1)-1));
+			}
+			m_FreqSave.push_back(value);
 		}
 	}
 	
@@ -2372,13 +2381,13 @@ STDMETHODIMP CWavRecord::WaveProcess()
 }
 STDMETHODIMP CWavRecord::WaveEnd()
 {
-	FILE* fp=NULL;
+	/*FILE* fp=NULL;
 	fopen_s(&fp,"d:\\wavedata.data","wb");
 	for(auto i=m_FreqSamples.begin();i!=m_FreqSamples.end();i++)
 	{
 		fwrite(&i->at(0),sizeof(double),SampleCount/2,fp);
 	}
-	fclose(fp);
+	fclose(fp);*/
 	return S_OK;
 }
 STDMETHODIMP CWavRecord::PullOutData(std::vector<std::vector<double>> *reciver)
