@@ -34,6 +34,7 @@ BEGIN
         MENUITEM "上传数据",                        ID_FILE_SAVE_AS
         MENUITEM "使用网站查询匹配",                    ID_FILE_SEARCH_VAR_SITE
         MENUITEM "录音",                          ID_FILE_RECORD
+        MENUITEM "分析并保存一个文件夹的音频",               ID_FILE_RUN_FOLDER
         MENUITEM SEPARATOR
         MENUITEM "E&xit",                       ID_APP_EXIT
     END

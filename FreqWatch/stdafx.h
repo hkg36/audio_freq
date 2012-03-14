@@ -34,6 +34,7 @@ extern CAppModule _Module;
 #include <CSqlite.h>
 #include <JsonLib.h>
 #include <HttpClient.h>
+#include <Mfapi.h>
 
 #ifdef _DEBUG
 #pragma comment(lib,"ExLibd.lib")

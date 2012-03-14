@@ -2345,18 +2345,19 @@ STDMETHODIMP CWavRecord::WaveData(void* data,DWORD datalen)
 	{
 		for(int i=0;i<count;i+=2)
 		{
-			double left=(double)*(((short*)data)+i);
-			double right=(double)*(((short*)data)+i+1);
+			SHRT_MIN;
+			double left=((double)*(((short*)data)+i)-SHRT_MIN)/(SHRT_MAX-SHRT_MIN+1);
+			double right=((double)*(((short*)data)+i+1)-SHRT_MIN)/(SHRT_MAX-SHRT_MIN+1);
 			double value=0;
-			if ((left < 0) && (right < 0))
+			if(left<0.5 && right<0.5)
 			{
-				value = left + right - (left * right / -(2^(16-1)-1));
+				value=2*left*right;
 			}
 			else
 			{
-				value = left + right - (left * right / (2^(16-1)-1));
+				value=2*(left+right)-2*left*right-1;
 			}
-			m_FreqSave.push_back(value);
+			m_FreqSave.push_back(value*(SHRT_MAX-SHRT_MIN+1)-(-SHRT_MIN));
 		}
 	}
 	

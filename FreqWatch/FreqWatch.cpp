@@ -55,7 +55,12 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	WSADATA wsadata;
 
 	WSAStartup(MAKEWORD(2,2),&wsadata);
+	if(S_OK != MFStartup(MF_VERSION))
+	{
+		return 0;
+	}
 	int nRet = Run(lpstrCmdLine, nCmdShow);
+	MFShutdown();
 	WSACleanup();
 
 	_Module.Term();

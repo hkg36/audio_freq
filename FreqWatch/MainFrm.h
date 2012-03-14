@@ -6,7 +6,6 @@
 
 #include "DIBBitmap.h"
 #include "music_reader.h"
-#include <Mfapi.h>
 #include "UploadFreqData.h"
 #include "SearchBySite.h"
 #include "..\WavSink\Fourier.h"
@@ -53,7 +52,7 @@ public:
 		COMMAND_ID_HANDLER(ID_FILE_SEARCH_VAR_SITE,OnSearchVarSite)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_FILE_RECORD,OnFileRecord)
-		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
+		COMMAND_ID_HANDLER(ID_FILE_RUN_FOLDER,OnRunFolder)
 		CHAIN_MSG_MAP(CUpdateUI<CMainFrame>)
 		CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
 	END_MSG_MAP()
@@ -113,15 +112,11 @@ public:
 		if(IDOK!=openfile.DoModal())
 			return S_FALSE;
 
-		if(S_OK != MFStartup(MF_VERSION))
-		{
-			return 0;
-		}
 		openFileName=openfile.m_szFileName;
 		openFileName=openFileName.Right(openFileName.GetLength()-openFileName.ReverseFind('\\')-1);
 		openFileName=openFileName.Left(openFileName.Find('.'));
 		dataline= ReadMusicFrequencyData(openfile.m_szFileName);
-		MFShutdown();
+		
 		m_trackBar.SetRangeMax(100);
 		m_trackBar.SetPos(50);
 		BuildData();
@@ -140,6 +135,12 @@ public:
 			MessageBox(L"歌曲名是空的,请检查.");
 			return S_OK;
 		}
+		
+		SaveMusicInfoToDb(dlg.filename);
+		return S_OK;
+	}
+	void SaveMusicInfoToDb(CAtlString title)
+	{
 		CSqlite db;
 		db.Open(L"D:\\freq_info.data.db");
 		CSqliteStmt insertFileName=db.Prepare(L"insert into songlist(name) values(?1)");
@@ -149,7 +150,7 @@ public:
 		CSqliteStmt insertCheck=db.Prepare(L"insert into Check_freq_index(Anchor_id,freq,time_offset) values(?1,?2,?3)");
 
 		int song_id=0;
-		insertFileName.Bind(1,dlg.filename);
+		insertFileName.Bind(1,title);
 		if(SQLITE_DONE==insertFileName.Step())
 		{
 			if(SQLITE_ROW==lastFileId.Step())
@@ -221,7 +222,6 @@ public:
 		lastAnchorID.Close();
 		insertCheck.Close();
 		db.Close();
-		return S_OK;
 	}
 	LRESULT OnFileOpen(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
@@ -238,11 +238,17 @@ public:
 			int match_count;
 			int start_time_point;
 		};
+		struct CheckPoint
+		{
+			int freq;
+			int time_offset;
+		};
 
 		CSqlite db;
 		db.Open(L"D:\\freq_info.data.db",SQLITE_OPEN_READONLY);
 		CSqliteStmt findAnchor = db.Prepare(L"select id,freq,time,song_id from Anchor_freq_index where freq=?1");
-		CSqliteStmt findCheckPoint =db.Prepare(L"select count(*) from Check_freq_index where Anchor_id=?1 and freq>=?2 and freq<=?3 and time_offset>=?4 and time_offset<=?5");
+		//CSqliteStmt findCheckPoint =db.Prepare(L"select count(*) from Check_freq_index where Anchor_id=?1 and freq>=?2 and freq<=?3 and time_offset>=?4 and time_offset<=?5");
+		CSqliteStmt getCheckOfAnchor =db.Prepare(L"select freq,time_offset from Check_freq_index where Anchor_id=?1");
 
 		std::vector<FreqInfo> freqinfos_use;
 		for(auto i=freqinfos.begin();i<freqinfos.end();i++)
@@ -255,6 +261,7 @@ public:
 		int ptcount=0;
 		size_t maybecount=0;
 		vector<FreqPointPicked> checkres;
+		std::map<int,std::vector<CheckPoint> > AnchorMap;
 		for(auto i=freqinfos_use.begin();i<freqinfos_use.end();i++)
 		{
 			vector<FreqPoint> maybeid;
@@ -275,7 +282,41 @@ public:
 			maybecount+=maybeid.size();
 			for(auto maybe=maybeid.begin();maybe!=maybeid.end();maybe++)
 			{
+				auto checks=AnchorMap.find(maybe->id);
+				if(checks==AnchorMap.end())
+				{
+					getCheckOfAnchor.Bind(1,maybe->id);
+					vector<CheckPoint> ptlist;
+					while(SQLITE_ROW==getCheckOfAnchor.Step())
+					{
+						CheckPoint pt;
+						pt.freq=getCheckOfAnchor.GetInt(0);
+						pt.time_offset=getCheckOfAnchor.GetInt(1);
+						ptlist.push_back(pt);
+					}
+					getCheckOfAnchor.Reset();
+					checks=AnchorMap.insert(std::map<int,std::vector<CheckPoint> >::value_type(maybe->id,std::move(ptlist))).first;
+				}
 				int match_count=0;
+				for(auto j=i+1;j<freqinfos_use.end();j++)
+				{
+					if(j->time>i->time+45)
+						break;
+					if(j->freq>i->freq-30 && j->freq<i->freq+30 &&
+						j->time>i->time+5)
+					{
+						int time_offset=j->time-i->time;
+						for(auto cp=checks->second.begin();cp!=checks->second.end();cp++)
+						{
+							if(cp->freq>=j->freq-1 && cp->freq<=j->freq+1 &&
+								cp->time_offset>=time_offset-1 && cp->time_offset<=time_offset+1)
+							{
+								match_count++;
+							}
+						}
+					}
+				}
+				/*
 				for(auto j=i+1;j<freqinfos_use.end();j++)
 				{
 					if(j->time>i->time+45)
@@ -298,7 +339,7 @@ public:
 						}
 						findCheckPoint.Reset();
 					}
-				}
+				}*/
 				if(match_count>=2)
 				{
 					FreqPointPicked picked;
@@ -314,8 +355,9 @@ public:
 			}
 		}
 
+		getCheckOfAnchor.Close();
 		findAnchor.Close();
-		findCheckPoint.Close();
+		//findCheckPoint.Close();
 		db.Close();
 
 		CAtlString resinfo;
@@ -389,7 +431,39 @@ public:
 		}
 		return S_OK;
 	}
-
+	LRESULT OnRunFolder(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		CFolderDialog dlg;
+		dlg.m_bExpandInitialSelection=TRUE;
+		if(IDOK!=dlg.DoModal())
+			return S_OK;
+		CAtlString path=dlg.m_szFolderPath;
+		std::vector<CAtlString> files;
+		CFindFile ff;
+		if(ff.FindFile(path+L"\\*"))
+		{
+			do
+			{
+				if(ff.IsDots())
+					continue;
+				files.push_back(ff.GetFilePath());
+			}
+			while(ff.FindNextFile());
+		}
+		for(auto i=files.begin();i!=files.end();i++)
+		{
+			dataline= ReadMusicFrequencyData(*i);
+			if(dataline.empty())
+				continue;
+			BuildData();
+			CAtlString fileName=*i;
+			fileName=fileName.Right(fileName.GetLength()-fileName.ReverseFind('\\')-1);
+			fileName=fileName.Left(fileName.Find('.'));
+			SaveMusicInfoToDb(fileName);
+		}
+		return S_OK;
+	}
+	
 	bool runing;
 	LRESULT OnFileRecord(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
@@ -508,7 +582,7 @@ public:
 	void BuildData()
 	{
 		darklines.clear();
-		const int checkR=1;
+		const int checkR=2;
 		for(size_t i=checkR;i!=dataline.size()-checkR;i++)
 		{
 			std::vector<double> line(SampleCount/2);
@@ -537,10 +611,12 @@ public:
 					}
 					double gpoint=sqrt(gx*gx+gy*gy);
 					line[j]=gpoint;*/
-				const double core1[3][3]={
-					{-1,-2,-1},
-					{-2,13,-2},
-					{-1,-2,-1}
+				const double core1[5][5]={
+					{0,-0.5,-1,-0.5,0},
+					{-0.5,-1,-2,-1,-0.5},
+					{-1,-2,21,-2,-1},
+					{-0.5,-1,-2,-1,-0.5},
+					{0,-0.5,-1,-0.5,0}
 				};
 				double gx=0;
 				for(int testi=-checkR;testi<checkR;testi++)
@@ -548,7 +624,7 @@ public:
 					for(int testj=-checkR;testj<checkR;testj++)
 					{
 						double v=dataline[i+testi][j+testj];
-						gx+=v*core1[testi+1][testj+1];
+						gx+=v*core1[testi+checkR][testj+checkR];
 					}
 				}
 				if(gx>0)
@@ -685,12 +761,6 @@ NEXT:;
 		return 0;
 	}
 
-	LRESULT OnAppAbout(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-	{
-		CAboutDlg dlg;
-		dlg.DoModal();
-		return 0;
-	}
 	LRESULT OnClientMouseMove(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& /*bHandled*/)
 	{
 		CPoint p;
